@@ -24,8 +24,14 @@ async fn main() -> Result<(), Error> {
 
     loop {
         let now = Utc::now();
-        let next_hour =
-            now.with_second(0).unwrap().with_nanosecond(0).unwrap() + Duration::hours(1);
+        let next_hour = now
+            .date_naive()
+            .and_hms_nano_opt(now.hour(), 0, 0, 0)
+            .unwrap()
+            .and_local_timezone(Utc)
+            .single()
+            .unwrap()
+            + Duration::hours(1);
         sleep((next_hour - now).to_std().unwrap()).await;
 
         let response = client
