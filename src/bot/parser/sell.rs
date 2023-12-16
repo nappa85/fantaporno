@@ -1,0 +1,93 @@
+use chrono::Utc;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
+    TransactionTrait,
+};
+use tgbot::{
+    api::Client,
+    types::{ChatPeerId, SendMessage, User},
+};
+
+use crate::Error;
+
+pub async fn execute<C>(
+    client: &Client,
+    conn: &C,
+    user: &User,
+    message_id: i64,
+    chat_id: ChatPeerId,
+    pornstar_name: String,
+) -> Result<Result<(), String>, Error>
+where
+    C: ConnectionTrait + TransactionTrait,
+{
+    let Ok(user_id) = u32::try_from(i64::from(user.id)) else {
+        return Ok(Err(format!("Invalid user id: {}", user.id)));
+    };
+
+    let Some(player) = crate::entities::player::Entity::find_by_id(user_id)
+        .one(conn)
+        .await?
+    else {
+        return Ok(Err("Player doesn't exists".into()));
+    };
+
+    let Some(pornstar) = crate::entities::pornstar::Entity::find()
+        .filter(crate::entities::pornstar::Column::Name.like(pornstar_name.as_str()))
+        .one(conn)
+        .await?
+    else {
+        return Ok(Err(format!("Pornstar \"{pornstar_name}\" not found")));
+    };
+
+    let now = Utc::now().naive_utc();
+    let Some(team) = crate::entities::team::Entity::find_by_id((player.telegram_id, pornstar.id))
+        .filter(
+            crate::entities::team::Column::EndDate
+                .is_null()
+                .or(crate::entities::team::Column::EndDate.gt(now)),
+        )
+        .one(conn)
+        .await?
+    else {
+        return Ok(Err(format!(
+            "Pornstar \"{}\" isn't in your team",
+            pornstar.name,
+        )));
+    };
+
+    let Some(cost) = pornstar.get_cost(conn).await? else {
+        return Ok(Err(format!(
+            "Pornstar \"{}\" doesn't have a valutation at the moment",
+            pornstar.name
+        )));
+    };
+
+    let txn = conn.begin().await?;
+
+    let mut team = crate::entities::team::ActiveModel::from(team);
+    team.end_date = ActiveValue::Set(Some(now));
+    team.update(&txn).await?;
+
+    crate::entities::player::ActiveModel {
+        telegram_id: ActiveValue::Set(player.telegram_id),
+        budget: ActiveValue::Set(player.budget + cost),
+        ..Default::default()
+    }
+    .update(&txn)
+    .await?;
+
+    txn.commit().await?;
+
+    client
+        .execute(
+            SendMessage::new(
+                chat_id,
+                format!("Pornstar \"{}\" is now free", pornstar.name),
+            )
+            .with_reply_to_message_id(message_id),
+        )
+        .await?;
+
+    Ok(Ok(()))
+}

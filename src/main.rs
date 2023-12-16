@@ -1,16 +1,27 @@
+use std::{env, sync::Arc};
+
 use chrono::{Duration, OutOfRangeError, Timelike, Utc, Weekday};
 use reqwest::Client;
 use scraper::{error::SelectorErrorKind, Html, Selector};
-use sea_orm::{Database, DbErr, TransactionTrait};
-use tokio::time::sleep;
+use sea_orm::{ConnectionTrait, Database, DbErr, TransactionTrait};
+use tgbot::{
+    api::{ClientError, ExecuteError},
+    types::ChatPeerId,
+};
+use tokio::{select, sync::Notify, time::sleep};
 
+mod bot;
 mod entities;
 
 const RANK_URL: &str = "https://www.pornhub.com/pornstars/top";
 const USER_AGENT: &str = "Tua madre";
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
+pub enum Error {
+    #[error("Env var error: {0}")]
+    Env(#[from] env::VarError),
+    #[error("Invalid CHAT_ID")]
+    InvalidChatId,
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("Sea-orm error: {0}")]
@@ -25,11 +36,39 @@ enum Error {
     InvalidTimezone,
     #[error("Chrono error: {0}")]
     Chrono(#[from] OutOfRangeError),
+    #[error("Telegram client error: {0}")]
+    TelegramClient(#[from] ClientError),
+    #[error("Telegram execute error: {0}")]
+    TelegramExec(#[from] ExecuteError),
+    #[error("Invalid position")]
+    InvalidPosition,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    let token = env::var("BOT_TOKEN")?;
+    let chat_id: i64 = env::var("CHAT_ID")?
+        .parse()
+        .map_err(|_| Error::InvalidChatId)?;
     let conn = Database::connect("sqlite:fantaporno.sqlite3").await?;
+    let notify = Arc::new(Notify::new());
+    let notify2 = Arc::clone(&notify);
+    select! {
+        out = scraper(&conn, notify) => {
+            println!("scraper terminated");
+            out
+        },
+        out = bot::execute(&conn, token, notify2, ChatPeerId::from(chat_id)) => {
+            println!("bot terminated");
+            out
+        },
+    }
+}
+
+async fn scraper<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
+where
+    C: ConnectionTrait + TransactionTrait,
+{
     let client = Client::new();
     let list_content = Selector::parse("ul#categoryListContent")?;
     let rank = Selector::parse("li.index-length")?;
@@ -70,7 +109,6 @@ async fn main() -> Result<(), Error> {
         let mut commit = false;
         for element in doc.select(&list_content) {
             let Some(rank_el) = element.select(&rank).next() else {
-                error = true;
                 commit = false;
                 break;
             };
@@ -79,22 +117,18 @@ async fn main() -> Result<(), Error> {
                 .next()
                 .and_then(|rank| rank.trim().parse().ok())
             else {
-                error = true;
                 commit = false;
                 break;
             };
             let Some(name_el) = element.select(&name).next() else {
-                error = true;
                 commit = false;
                 break;
             };
             let Some(name) = name_el.text().next().map(str::trim) else {
-                error = true;
                 commit = false;
                 break;
             };
             let Some(url) = name_el.value().attr("href") else {
-                error = true;
                 commit = false;
                 break;
             };
@@ -108,8 +142,10 @@ async fn main() -> Result<(), Error> {
 
         if commit {
             txn.commit().await?;
+            notifier.notify_one();
         } else {
             txn.rollback().await?;
+            error = true;
         }
     }
 }

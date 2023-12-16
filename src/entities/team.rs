@@ -34,28 +34,6 @@ impl Related<super::pornstar::Entity> for Entity {
 
 impl ActiveModelBehavior for ActiveModel {}
 
-// pub async fn find_or_insert<C: ConnectionTrait>(
-//     conn: &C,
-//     name: &str,
-//     url: &str,
-// ) -> Result<Model, DbErr> {
-//     let pornstar = Entity::find()
-//         .filter(Column::Name.eq(name).and(Column::Url.eq(url)))
-//         .one(conn)
-//         .await?;
-//     if let Some(p) = pornstar {
-//         return Ok(p);
-//     }
-
-//     ActiveModel {
-//         name: ActiveValue::Set(name.to_owned()),
-//         url: ActiveValue::Set(url.to_owned()),
-//         ..Default::default()
-//     }
-//     .insert(conn)
-//     .await
-// }
-
 #[cfg(test)]
 pub mod tests {
     use chrono::NaiveDateTime;

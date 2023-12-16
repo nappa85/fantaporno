@@ -1,4 +1,5 @@
-use sea_orm::{entity::prelude::*, ActiveValue};
+use chrono::NaiveDateTime;
+use sea_orm::{entity::prelude::*, ActiveValue, QuerySelect};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "pornstars")]
@@ -30,6 +31,51 @@ impl Related<super::team::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Model {
+    pub async fn get_cost<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+    ) -> Result<Option<u32>, crate::Error> {
+        let Some(max_date) = super::position::Entity::find()
+            .select_only()
+            .column_as(super::position::Column::Date.max(), "max")
+            .into_tuple::<NaiveDateTime>()
+            .one(conn)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(position) = super::position::Entity::find()
+            .filter(
+                super::position::Column::PornstarId
+                    .eq(self.id)
+                    .and(super::position::Column::Date.eq(max_date)),
+            )
+            .one(conn)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(max_position) = super::position::Entity::find()
+            .filter(super::position::Column::Date.eq(position.date))
+            .select_only()
+            .column_as(super::position::Column::Position.max(), "max")
+            .into_tuple::<u32>()
+            .one(conn)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let position =
+            u32::try_from(position.position).map_err(|_| crate::Error::InvalidPosition)?;
+
+        Ok(Some(super::BUDGET * position / max_position))
+    }
+}
 
 pub async fn find_or_insert<C: ConnectionTrait>(
     conn: &C,
