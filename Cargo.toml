@@ -6,9 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4.26"
-reqwest = "0.11.18"
-scraper = "0.17.1"
-sea-orm = { version = "0.11.3", features = ["macros", "sqlx-sqlite", "runtime-tokio-rustls"] }
-thiserror = "1.0.40"
-tokio = { version = "1.29.1", features = ["macros", "rt", "rt-multi-thread", "fs"] }
+chrono = "0.4.31"
+futures-util = "0.3.29"
+reqwest = "0.11.22"
+scraper = "0.18.1"
+sea-orm = { version = "0.12.10", features = ["macros", "sqlx-sqlite", "runtime-tokio-rustls"] }
+thiserror = "1.0.51"
+tokio = { version = "1.35.0", features = ["macros", "rt", "rt-multi-thread", "fs"] }
+
+[dev-dependencies]
+sea-orm = { version = "0.12.10", features = ["macros", "sqlx-sqlite", "runtime-tokio-rustls", "mock"] }

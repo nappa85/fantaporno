@@ -13,11 +13,19 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::position::Entity")]
     Position,
+    #[sea_orm(has_many = "super::team::Entity")]
+    Team,
 }
 
 impl Related<super::position::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Position.def()
+    }
+}
+
+impl Related<super::team::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Team.def()
     }
 }
 
@@ -44,3 +52,14 @@ pub async fn find_or_insert<C: ConnectionTrait>(
     .insert(conn)
     .await
 }
+
+// #[cfg(test)]
+// pub mod tests {
+//     pub fn mock_pornstar() -> [super::Model; 1] {
+//         [super::Model {
+//             id: 1,
+//             name: String::from("Tua madre"),
+//             url: String::from("lemonparty.com"),
+//         }]
+//     }
+// }
