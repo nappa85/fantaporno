@@ -21,15 +21,16 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let Ok(user_id) = u32::try_from(i64::from(user.id)) else {
-        return Ok(Err(format!("Invalid user id: {}", user.id)));
-    };
-
-    let Some(player) = crate::entities::player::Entity::find_by_id(user_id)
+    let Some(player) = crate::entities::player::Entity::find()
+        .filter(
+            crate::entities::player::Column::TelegramId
+                .eq(i64::from(user.id))
+                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
+        )
         .one(conn)
         .await?
     else {
-        return Ok(Err("Player doesn't exists".into()));
+        return Ok(Err("Player doesn't exists, use /start to create".into()));
     };
 
     let Some(pornstar) = crate::entities::pornstar::Entity::find()
@@ -57,7 +58,7 @@ where
         return Ok(Err(format!(
             "Pornstar \"{}\" is already in {} team",
             pornstar.name,
-            if team.player_id == player.telegram_id {
+            if team.player_id == player.id {
                 "your"
             } else {
                 "another"
@@ -81,7 +82,7 @@ where
     let txn = conn.begin().await?;
 
     crate::entities::team::ActiveModel {
-        player_id: ActiveValue::Set(player.telegram_id),
+        player_id: ActiveValue::Set(player.id),
         pornstar_id: ActiveValue::Set(pornstar.id),
         start_date: ActiveValue::Set(now),
         ..Default::default()
@@ -90,7 +91,7 @@ where
     .await?;
 
     crate::entities::player::ActiveModel {
-        telegram_id: ActiveValue::Set(player.telegram_id),
+        id: ActiveValue::Set(player.id),
         budget: ActiveValue::Set(player.budget - cost),
         ..Default::default()
     }

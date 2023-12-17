@@ -20,27 +20,26 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + StreamTrait,
 {
-    let Ok(user_id) = u32::try_from(i64::from(user.id)) else {
-        return Ok(Err(format!("Invalid user id: {}", user.id)));
-    };
-
-    let Some(player) = crate::entities::player::Entity::find_by_id(user_id)
+    let Some(player) = crate::entities::player::Entity::find()
+        .filter(
+            crate::entities::player::Column::TelegramId
+                .eq(i64::from(user.id))
+                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
+        )
         .one(conn)
         .await?
     else {
-        return Ok(Err("Player doesn't exists".into()));
+        return Ok(Err("Player doesn't exists, use /start to create".into()));
     };
 
     let now = Utc::now().naive_utc();
     let team = crate::entities::team::Entity::find()
         .filter(
-            crate::entities::team::Column::PlayerId
-                .eq(player.telegram_id)
-                .and(
-                    crate::entities::team::Column::EndDate
-                        .is_null()
-                        .or(crate::entities::team::Column::EndDate.lt(now)),
-                ),
+            crate::entities::team::Column::PlayerId.eq(player.id).and(
+                crate::entities::team::Column::EndDate
+                    .is_null()
+                    .or(crate::entities::team::Column::EndDate.lt(now)),
+            ),
         )
         .all(conn)
         .await?;

@@ -1,4 +1,4 @@
-use sea_orm::{ConnectionTrait, EntityTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use tgbot::{
     api::Client,
     types::{ChatPeerId, SendMessage, User},
@@ -16,11 +16,12 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait,
 {
-    let Ok(user_id) = u32::try_from(i64::from(user.id)) else {
-        return Ok(Err(format!("Invalid user id: {}", user.id)));
-    };
-
-    if crate::entities::player::Entity::find_by_id(user_id)
+    if crate::entities::player::Entity::find()
+        .filter(
+            crate::entities::player::Column::TelegramId
+                .eq(i64::from(user.id))
+                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
+        )
         .one(conn)
         .await?
         .is_some()
@@ -30,7 +31,8 @@ where
 
     crate::entities::player::insert(
         conn,
-        user_id,
+        i64::from(user.id),
+        i64::from(chat_id),
         if let Some(last_name) = &user.last_name {
             format!("{} {last_name}", user.first_name)
         } else {

@@ -21,15 +21,16 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let Ok(user_id) = u32::try_from(i64::from(user.id)) else {
-        return Ok(Err(format!("Invalid user id: {}", user.id)));
-    };
-
-    let Some(player) = crate::entities::player::Entity::find_by_id(user_id)
+    let Some(player) = crate::entities::player::Entity::find()
+        .filter(
+            crate::entities::player::Column::TelegramId
+                .eq(i64::from(user.id))
+                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
+        )
         .one(conn)
         .await?
     else {
-        return Ok(Err("Player doesn't exists".into()));
+        return Ok(Err("Player doesn't exists, use /start to create".into()));
     };
 
     let Some(pornstar) = crate::entities::pornstar::Entity::find()
@@ -41,7 +42,7 @@ where
     };
 
     let now = Utc::now().naive_utc();
-    let Some(team) = crate::entities::team::Entity::find_by_id((player.telegram_id, pornstar.id))
+    let Some(team) = crate::entities::team::Entity::find_by_id((player.id, pornstar.id))
         .filter(
             crate::entities::team::Column::EndDate
                 .is_null()
@@ -70,7 +71,7 @@ where
     team.update(&txn).await?;
 
     crate::entities::player::ActiveModel {
-        telegram_id: ActiveValue::Set(player.telegram_id),
+        id: ActiveValue::Set(player.id),
         budget: ActiveValue::Set(player.budget + cost),
         ..Default::default()
     }

@@ -1,5 +1,5 @@
 use chrono::Utc;
-use sea_orm::{ConnectionTrait, EntityTrait, StreamTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, StreamTrait};
 use tgbot::{
     api::Client,
     types::{ChatPeerId, ParseMode, SendMessage},
@@ -12,14 +12,17 @@ pub async fn execute<C>(
     conn: &C,
     message_id: Option<i64>,
     chat_id: ChatPeerId,
-) -> Result<(), Error>
+) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait + StreamTrait,
 {
     // we can't use `stream` here since `score` would deadlock the connection
-    let players = crate::entities::player::Entity::find().all(conn).await?;
+    let players = crate::entities::player::Entity::find()
+        .filter(crate::entities::player::Column::ChatId.eq(i64::from(chat_id)))
+        .all(conn)
+        .await?;
     let msg = if players.is_empty() {
-        String::from("At the moment there are no players, use /start to join")
+        String::from("At the moment there are no players in this chat, use /start to join")
     } else {
         let now = Utc::now().naive_utc();
         let mut scores = Vec::with_capacity(players.len());
@@ -37,7 +40,7 @@ where
                 }
                 buf.push_str(&format!(
                     "[{}](tg://user?id={}) {score}",
-                    player.name, player.telegram_id
+                    player.name, player.id
                 ));
                 buf
             })
@@ -51,5 +54,5 @@ where
     };
     client.execute(message).await?;
 
-    Ok(())
+    Ok(Ok(()))
 }

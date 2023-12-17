@@ -35,9 +35,7 @@ where
         Some("/start") => create::execute(client, conn, user, message_id, chat_id).await?,
         Some("/budget") => budget::execute(client, conn, user, message_id, chat_id).await?,
         Some("/team") => team::execute(client, conn, user, message_id, chat_id).await?,
-        Some("/chart") => chart::execute(client, conn, Some(message_id), chat_id)
-            .await
-            .map(Ok)?,
+        Some("/chart") => chart::execute(client, conn, Some(message_id), chat_id).await?,
         Some("/quote") => {
             let pornstar_name = iter.fold(String::new(), |mut buf, chunk| {
                 if !buf.is_empty() {

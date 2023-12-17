@@ -5,7 +5,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "teams")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub player_id: u32,
+    pub player_id: i32,
     #[sea_orm(primary_key, auto_increment = false)]
     pub pornstar_id: i32,
     pub start_date: NaiveDateTime,

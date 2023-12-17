@@ -6,8 +6,10 @@ use std::{collections::HashMap, future};
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "players")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub telegram_id: u32,
+    #[sea_orm(primary_key)]
+    pub id: i32,
+    pub telegram_id: i64,
+    pub chat_id: i64,
     pub name: String,
     pub budget: u32,
 }
@@ -35,7 +37,7 @@ impl Model {
     ) -> Result<i64, DbErr> {
         let teams = super::team::Entity::find()
             .filter(
-                super::team::Column::PlayerId.eq(self.telegram_id).and(
+                super::team::Column::PlayerId.eq(self.id).and(
                     super::team::Column::EndDate
                         .is_null()
                         .or(super::team::Column::EndDate.gt(date)),
@@ -87,13 +89,16 @@ impl Model {
 
 pub async fn insert<C: ConnectionTrait>(
     conn: &C,
-    telegram_id: u32,
+    telegram_id: i64,
+    chat_id: i64,
     name: String,
 ) -> Result<Model, DbErr> {
     ActiveModel {
         telegram_id: ActiveValue::Set(telegram_id),
+        chat_id: ActiveValue::Set(chat_id),
         name: ActiveValue::Set(name),
         budget: ActiveValue::Set(super::BUDGET),
+        ..Default::default()
     }
     .insert(conn)
     .await
@@ -106,7 +111,9 @@ pub mod tests {
 
     pub fn mock_player() -> [super::Model; 1] {
         [super::Model {
+            id: 1,
             telegram_id: 1,
+            chat_id: 1,
             name: String::from("pippo"),
             budget: 0,
         }]
@@ -121,7 +128,7 @@ pub mod tests {
             .append_query_results([crate::entities::position::tests::mock_positions()])
             .into_connection();
 
-        let player = super::Entity::find_by_id(1_u32)
+        let player = super::Entity::find_by_id(1)
             .one(&conn)
             .await
             .unwrap()
@@ -138,7 +145,7 @@ pub mod tests {
             .append_query_results::<crate::entities::team::Model, _, _>([[]])
             .into_connection();
 
-        let player = super::Entity::find_by_id(1_u32)
+        let player = super::Entity::find_by_id(1)
             .one(&conn)
             .await
             .unwrap()

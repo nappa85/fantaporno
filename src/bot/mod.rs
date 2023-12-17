@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::Error;
-use sea_orm::{ConnectionTrait, StreamTrait, TransactionTrait};
+use crate::{entities::player, Error};
+use sea_orm::{ConnectionTrait, EntityTrait, QuerySelect, StreamTrait, TransactionTrait};
 use tgbot::{
     api::Client,
     types::{ChatPeerId, GetUpdates, Message, MessageData, Text, UpdateType},
@@ -10,23 +10,18 @@ use tokio::{select, sync::Notify};
 
 mod parser;
 
-pub async fn execute<C>(
-    conn: &C,
-    token: String,
-    notifier: Arc<Notify>,
-    chat_id: ChatPeerId,
-) -> Result<(), Error>
+pub async fn execute<C>(conn: &C, token: String, notifier: Arc<Notify>) -> Result<(), Error>
 where
     C: ConnectionTrait + StreamTrait + TransactionTrait,
 {
     let client = Client::new(token)?;
     select! {
-        out = receiver(&client, conn, chat_id) => out,
-        out = sender(&client, conn, notifier, chat_id) => out,
+        out = receiver(&client, conn) => out,
+        out = sender(&client, conn, notifier) => out,
     }
 }
 
-async fn receiver<C>(client: &Client, conn: &C, chat_id: ChatPeerId) -> Result<(), Error>
+async fn receiver<C>(client: &Client, conn: &C) -> Result<(), Error>
 where
     C: ConnectionTrait + StreamTrait + TransactionTrait,
 {
@@ -40,10 +35,9 @@ where
             )
             .await?;
         for update in updates {
-            // work only on designed chat
-            if update.get_chat_id() != Some(chat_id) {
+            let Some(chat_id) = update.get_chat_id() else {
                 continue;
-            }
+            };
 
             println!("Update {update:?}");
             if let UpdateType::Message(Message {
@@ -59,18 +53,25 @@ where
     }
 }
 
-async fn sender<C>(
-    client: &Client,
-    conn: &C,
-    notifier: Arc<Notify>,
-    chat_id: ChatPeerId,
-) -> Result<(), Error>
+async fn sender<C>(client: &Client, conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
 where
     C: ConnectionTrait + StreamTrait,
 {
     loop {
         notifier.notified().await;
 
-        parser::chart::execute(client, conn, None, chat_id).await?;
+        let chat_ids = player::Entity::find()
+            .select_only()
+            .column(player::Column::ChatId)
+            .distinct()
+            .into_tuple::<i32>()
+            .all(conn)
+            .await?;
+
+        for chat_id in chat_ids {
+            let _ =
+                parser::chart::execute(client, conn, None, ChatPeerId::from(i64::from(chat_id)))
+                    .await?;
+        }
     }
 }
