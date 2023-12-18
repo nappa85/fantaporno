@@ -18,6 +18,8 @@ const USER_AGENT: &str = "Tua madre";
 pub enum Error {
     #[error("Missing env var BOT_TOKEN")]
     MissingBotToken,
+    #[error("Missing env var BOT_NAME")]
+    MissingBotName,
     #[error("Request error: {0}")]
     Reqwest(#[from] reqwest::Error),
     #[error("Sea-orm error: {0}")]
@@ -43,6 +45,8 @@ pub enum Error {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let token = env::var("BOT_TOKEN").map_err(|_| Error::MissingBotToken)?;
+    let name = env::var("BOT_NAME").map_err(|_| Error::MissingBotName)?;
+    let name = format!("@{}", name.strip_prefix('@').unwrap_or(name.as_str()));
     let conn = Database::connect("sqlite:fantaporno.sqlite3").await?;
     let notify = Arc::new(Notify::new());
     let notify2 = Arc::clone(&notify);
@@ -52,7 +56,7 @@ async fn main() -> Result<(), Error> {
             println!("scraper terminated");
             out
         },
-        out = bot::execute(&conn, token, notify2) => {
+        out = bot::execute(&conn, token, &name, notify2) => {
             println!("bot terminated");
             out
         },

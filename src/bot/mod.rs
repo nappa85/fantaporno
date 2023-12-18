@@ -10,18 +10,23 @@ use tokio::{select, sync::Notify};
 
 mod parser;
 
-pub async fn execute<C>(conn: &C, token: String, notifier: Arc<Notify>) -> Result<(), Error>
+pub async fn execute<C>(
+    conn: &C,
+    token: String,
+    name: &str,
+    notifier: Arc<Notify>,
+) -> Result<(), Error>
 where
     C: ConnectionTrait + StreamTrait + TransactionTrait,
 {
     let client = Client::new(token)?;
     select! {
-        out = receiver(&client, conn) => out,
+        out = receiver(&client, conn, name) => out,
         out = sender(&client, conn, notifier) => out,
     }
 }
 
-async fn receiver<C>(client: &Client, conn: &C) -> Result<(), Error>
+async fn receiver<C>(client: &Client, conn: &C, name: &str) -> Result<(), Error>
 where
     C: ConnectionTrait + StreamTrait + TransactionTrait,
 {
@@ -46,7 +51,8 @@ where
                 ..
             }) = update.update_type
             {
-                parser::parse_message(client, conn, update.get_user(), id, data, chat_id).await?
+                parser::parse_message(client, conn, name, update.get_user(), id, data, chat_id)
+                    .await?
             }
             offset = update.id;
         }

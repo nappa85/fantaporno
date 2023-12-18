@@ -1,4 +1,4 @@
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{ConnectionTrait, TransactionTrait};
 use tgbot::{
     api::Client,
     types::{ChatPeerId, SendMessage},
@@ -16,12 +16,10 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let Some(pornstar) = crate::entities::pornstar::Entity::find()
-        .filter(crate::entities::pornstar::Column::Name.like(pornstar_name.as_str()))
-        .one(conn)
-        .await?
-    else {
-        return Ok(Err(format!("Pornstar \"{pornstar_name}\" not found")));
+    let pornstar = match crate::entities::pornstar::search(conn, &pornstar_name).await {
+        Ok(Ok(pornstar)) => pornstar,
+        Ok(Err(err)) => return Ok(Err(err)),
+        Err(err) => return Err(Error::from(err)),
     };
 
     let Some(cost) = pornstar.get_cost(conn).await? else {

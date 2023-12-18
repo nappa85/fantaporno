@@ -1,7 +1,7 @@
 use sea_orm::{ConnectionTrait, StreamTrait, TransactionTrait};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, SendMessage, User},
+    types::{ChatPeerId, ParseMode, SendMessage, User},
 };
 
 mod budget;
@@ -16,6 +16,7 @@ mod team;
 pub async fn parse_message<C>(
     client: &Client,
     conn: &C,
+    name: &str,
     user: Option<&User>,
     message_id: i64,
     msg: &str,
@@ -30,7 +31,7 @@ where
     };
 
     let mut iter = msg.split_whitespace();
-    let res = match iter.next() {
+    let res = match iter.next().map(|msg| msg.strip_suffix(name).unwrap_or(msg)) {
         Some("/help") => help::execute(client, message_id, chat_id).await.map(Ok)?,
         Some("/start") => create::execute(client, conn, user, message_id, chat_id).await?,
         Some("/budget") => budget::execute(client, conn, user, message_id, chat_id).await?,
@@ -76,7 +77,8 @@ where
         client
             .execute(
                 SendMessage::new(chat_id, format!("Error: {err}"))
-                    .with_reply_to_message_id(message_id),
+                    .with_reply_to_message_id(message_id)
+                    .with_parse_mode(ParseMode::Markdown),
             )
             .await?;
     }

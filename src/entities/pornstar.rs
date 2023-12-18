@@ -99,6 +99,42 @@ pub async fn find_or_insert<C: ConnectionTrait>(
     .await
 }
 
+pub async fn search<C: ConnectionTrait>(
+    conn: &C,
+    name: &str,
+) -> Result<Result<Model, String>, DbErr> {
+    if name.chars().count() < 3 {
+        return Ok(Err(String::from("Error: search string too short")));
+    }
+
+    let mut pornstars = Entity::find()
+        .filter(Column::Name.like(format!("%{name}%")))
+        .all(conn)
+        .await?;
+    match pornstars.len() {
+        0 => Ok(Err(format!("Pornstar \"{name}\" not found"))),
+        1 => Ok(Ok(pornstars.remove(0))),
+        _ => {
+            if let Some(index) = pornstars
+                .iter()
+                .position(|pornstar| pornstar.name.eq_ignore_ascii_case(name))
+            {
+                Ok(Ok(pornstars.remove(index)))
+            } else {
+                Ok(Err(pornstars.into_iter().fold(
+                    String::from("Which one you mean?"),
+                    |mut buf, pornstar| {
+                        buf.push_str("\n* `");
+                        buf.push_str(&pornstar.name);
+                        buf.push('`');
+                        buf
+                    },
+                )))
+            }
+        }
+    }
+}
+
 // #[cfg(test)]
 // pub mod tests {
 //     pub fn mock_pornstar() -> [super::Model; 1] {
