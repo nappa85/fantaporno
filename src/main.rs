@@ -1,6 +1,7 @@
 use std::{env, sync::Arc};
 
 use chrono::{Duration, OutOfRangeError, Timelike, Utc, Weekday};
+use futures_util::future::try_join_all;
 use reqwest::Client;
 use scraper::{error::SelectorErrorKind, Html, Selector};
 use sea_orm::{ConnectionTrait, Database, DbErr, TransactionTrait};
@@ -11,7 +12,7 @@ mod bot;
 mod entities;
 
 const TOP_800_URL: &str = "https://www.pornhub.com/pornstars/top";
-// const PORNSTAR_AMATORIAL_URL: &str = "https://www.pornhub.com/pornstars?page=";
+const PORNSTAR_AMATORIAL_URL: &str = "https://www.pornhub.com/pornstars?page=";
 const USER_AGENT: &str = "Tua madre";
 
 #[derive(thiserror::Error, Debug)]
@@ -50,7 +51,8 @@ async fn main() -> Result<(), Error> {
     let conn = Database::connect("sqlite:fantaporno.sqlite3").await?;
     let notify = Arc::new(Notify::new());
     let notify2 = Arc::clone(&notify);
-    let scraper = scrape_top_800;
+    // let scraper = scrape_top_800;
+    let scraper = scrape_pornstar_amatorial;
     select! {
         out = scraper(&conn, notify) => {
             println!("scraper terminated");
@@ -152,93 +154,148 @@ where
     }
 }
 
-// async fn scrape_pornstar_amatorial<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
-// where
-//     C: ConnectionTrait + TransactionTrait,
-// {
-//     let client = Client::new();
-//     let list_content = Selector::parse("ul#popularPornstars li.performerCard")?;
-//     let rank = Selector::parse("span.rank_number")?;
-//     let name = Selector::parse("a.title")?;
+async fn scrape_pornstar_amatorial<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
+where
+    C: ConnectionTrait + TransactionTrait,
+{
+    let client = Client::new();
+    let list_content = Selector::parse("ul#pornstarListSection li div.performerCard").unwrap();
+    let rank = Selector::parse("span.rank_number").unwrap();
+    let name = Selector::parse("img.pornstarThumb").unwrap();
+    let link = Selector::parse("a.pornstarLink").unwrap();
 
-//     let mut error = false;
-//     loop {
-//         let now = Utc::now();
-//         // on error simply wait one hour and retry, else wait next sunday
-//         let next_tick = if error {
-//             now.date_naive()
-//                 .and_hms_opt(now.hour(), 0, 0)
-//                 .ok_or(Error::InvalidNextHour)?
-//         } else {
-//             now.date_naive()
-//                 .week(Weekday::Sun)
-//                 .last_day()
-//                 .and_hms_opt(23, 0, 0)
-//                 .ok_or(Error::InvalidNextWeek)?
-//         };
-//         let next_tick = next_tick
-//             .and_local_timezone(Utc)
-//             .single()
-//             .ok_or(Error::InvalidTimezone)?
-//             + Duration::hours(1);
-//         sleep((next_tick - now).to_std()?).await;
+    let mut error = false;
+    loop {
+        let now = Utc::now();
+        // on error simply wait one hour and retry, else wait next sunday
+        let next_tick = if error {
+            now.date_naive()
+                .and_hms_opt(now.hour(), 0, 0)
+                .ok_or(Error::InvalidNextHour)?
+        } else {
+            now.date_naive()
+                .week(Weekday::Sun)
+                .last_day()
+                .and_hms_opt(23, 0, 0)
+                .ok_or(Error::InvalidNextWeek)?
+        };
+        let next_tick = next_tick
+            .and_local_timezone(Utc)
+            .single()
+            .ok_or(Error::InvalidTimezone)?
+            + Duration::hours(1);
+        sleep((next_tick - now).to_std()?).await;
 
-//         let txn = conn.begin().await?;
-//         error = false;
-//         let mut commit = false;
-//         'page: for page in 1..=16 {
-//             let response = client
-//                 .get(format!("{PORNSTAR_AMATORIAL_URL}{page}"))
-//                 .header("User-Agent", USER_AGENT)
-//                 .send()
-//                 .await?;
-//             let text = response.text().await?;
-//             let doc = Html::parse_document(&text);
+        let txn = conn.begin().await?;
+        let scraped = try_join_all((1..=16).map(|page| {
+            scrape_pornstar_amatorial_page(&txn, &client, &list_content, &rank, &name, &link, page)
+        }))
+        .await?;
+        let mut commit = false;
+        for scrap in scraped {
+            if let Some(pornstar_rank) = scrap {
+                for (pornstar_id, rank) in pornstar_rank {
+                    if entities::position::inserted(&txn, pornstar_id, next_tick, rank).await? {
+                        commit = true;
+                    }
+                }
+            } else {
+                error = true;
+                commit = false;
+                break;
+            }
+        }
 
-//             for element in doc.select(&list_content) {
-//                 let Some(rank_el) = element.select(&rank).next() else {
-//                     commit = false;
-//                     error = true;
-//                     break 'page;
-//                 };
-//                 let Some(rank) = rank_el
-//                     .text()
-//                     .next()
-//                     .and_then(|rank| rank.trim().parse().ok())
-//                 else {
-//                     commit = false;
-//                     error = true;
-//                     break 'page;
-//                 };
-//                 let Some(name_el) = element.select(&name).next() else {
-//                     commit = false;
-//                     error = true;
-//                     break 'page;
-//                 };
-//                 let Some(name) = name_el.text().next().map(str::trim) else {
-//                     commit = false;
-//                     error = true;
-//                     break 'page;
-//                 };
-//                 let Some(url) = name_el.value().attr("href") else {
-//                     commit = false;
-//                     error = true;
-//                     break 'page;
-//                 };
+        if commit {
+            txn.commit().await?;
+            notifier.notify_one();
+        } else {
+            txn.rollback().await?;
+        }
+    }
+}
 
-//                 let pornstar = entities::pornstar::find_or_insert(&txn, name, url).await?;
+async fn scrape_pornstar_amatorial_page<C>(
+    conn: &C,
+    client: &Client,
+    list_content: &Selector,
+    rank: &Selector,
+    name: &Selector,
+    link: &Selector,
+    page: u8,
+) -> Result<Option<Vec<(i32, i32)>>, Error>
+where
+    C: ConnectionTrait,
+{
+    let response = client
+        .get(format!("{PORNSTAR_AMATORIAL_URL}{page}"))
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await?;
+    let text = response.text().await?;
+    let doc = Html::parse_document(&text);
 
-//                 if entities::position::inserted(&txn, pornstar.id, next_tick, rank).await? {
-//                     commit = true;
-//                 }
-//             }
-//         }
+    let mut ranks = Vec::new();
+    for element in doc.select(list_content) {
+        let Some(rank_el) = element.select(rank).next() else {
+            return Ok(None);
+        };
+        let Some(rank) = rank_el
+            .text()
+            .next()
+            .and_then(|rank| rank.trim().parse().ok())
+        else {
+            return Ok(None);
+        };
+        let Some(name_el) = element.select(name).next() else {
+            return Ok(None);
+        };
+        let Some(name) = name_el.value().attr("alt") else {
+            return Ok(None);
+        };
+        let Some(link_el) = element.select(link).next() else {
+            return Ok(None);
+        };
+        let Some(url) = link_el.value().attr("href") else {
+            return Ok(None);
+        };
 
-//         if commit {
-//             txn.commit().await?;
-//             notifier.notify_one();
-//         } else {
-//             txn.rollback().await?;
-//         }
-//     }
-// }
+        let pornstar = entities::pornstar::find_or_insert(conn, name, url).await?;
+
+        ranks.push((pornstar.id, rank));
+    }
+
+    Ok(Some(ranks))
+}
+
+#[cfg(test)]
+mod tests {
+    use reqwest::Client;
+    use scraper::Selector;
+    use sea_orm::Database;
+
+    #[tokio::test]
+    async fn scraper() {
+        let conn = Database::connect("sqlite:fantaporno.sqlite3")
+            .await
+            .unwrap();
+        let client = Client::new();
+        let list_content = Selector::parse("ul#pornstarListSection li div.performerCard").unwrap();
+        let rank = Selector::parse("span.rank_number").unwrap();
+        let name = Selector::parse("img.pornstarThumb").unwrap();
+        let link = Selector::parse("a.pornstarLink").unwrap();
+        let out = super::scrape_pornstar_amatorial_page(
+            &conn,
+            &client,
+            &list_content,
+            &rank,
+            &name,
+            &link,
+            1,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(out[0].1, 1);
+    }
+}
