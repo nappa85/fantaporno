@@ -1,6 +1,8 @@
 use chrono::NaiveDateTime;
 use sea_orm::{entity::prelude::*, ActiveValue, QuerySelect};
 
+use super::chat::Lang;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "pornstars")]
 pub struct Model {
@@ -33,7 +35,7 @@ impl Related<super::team::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    pub async fn get_cost<C: ConnectionTrait>(
+    async fn get_cost_inner<C: ConnectionTrait>(
         &self,
         conn: &C,
     ) -> Result<Option<u32>, crate::Error> {
@@ -75,6 +77,26 @@ impl Model {
 
         Ok(Some(super::BUDGET * position / max_position))
     }
+
+    pub async fn get_cost<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        lang: Lang,
+    ) -> Result<Result<u32, String>, crate::Error> {
+        match self.get_cost_inner(conn).await? {
+            Some(cost) => Ok(Ok(cost)),
+            None => Ok(Err(match lang {
+                Lang::En => format!(
+                    "Pornstar \"{}\" doesn't have a valutation at the moment",
+                    self.name
+                ),
+                Lang::It => format!(
+                    "Il/la pornostar \"{}\" non ha una valutazione in questo momento",
+                    self.name
+                ),
+            })),
+        }
+    }
 }
 
 pub async fn find_or_insert<C: ConnectionTrait>(
@@ -102,9 +124,13 @@ pub async fn find_or_insert<C: ConnectionTrait>(
 pub async fn search<C: ConnectionTrait>(
     conn: &C,
     name: &str,
+    lang: Lang,
 ) -> Result<Result<Model, String>, DbErr> {
     if name.chars().count() < 3 {
-        return Ok(Err(String::from("Error: search string too short")));
+        return Ok(Err(String::from(match lang {
+            Lang::En => "search string too short",
+            Lang::It => "la stringa di ricerca è troppo corta",
+        })));
     }
 
     let mut pornstars = Entity::find()
@@ -112,7 +138,10 @@ pub async fn search<C: ConnectionTrait>(
         .all(conn)
         .await?;
     match pornstars.len() {
-        0 => Ok(Err(format!("Pornstar \"{name}\" not found"))),
+        0 => Ok(Err(match lang {
+            Lang::En => format!("Pornstar \"{name}\" not found"),
+            Lang::It => format!("Pornostar \"{name}\" non trovata/o"),
+        })),
         1 => Ok(Ok(pornstars.remove(0))),
         _ => {
             if let Some(index) = pornstars
@@ -122,7 +151,10 @@ pub async fn search<C: ConnectionTrait>(
                 Ok(Ok(pornstars.remove(index)))
             } else {
                 Ok(Err(pornstars.into_iter().fold(
-                    String::from("Which one you mean?"),
+                    String::from(match lang {
+                        Lang::En => "Which one do you mean?",
+                        Lang::It => "Quale intendevi?",
+                    }),
                     |mut buf, pornstar| {
                         buf.push_str("\n* `");
                         buf.push_str(&pornstar.name);

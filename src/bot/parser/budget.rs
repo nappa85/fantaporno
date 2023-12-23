@@ -1,38 +1,36 @@
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+use sea_orm::ConnectionTrait;
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, SendMessage, User},
+    types::{SendMessage, User},
 };
 
 use crate::Error;
+
+use super::{Chat, Lang};
 
 pub async fn execute<C>(
     client: &Client,
     conn: &C,
     user: &User,
     message_id: i64,
-    chat_id: ChatPeerId,
+    chat: &Chat,
 ) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait,
 {
-    let Some(player) = crate::entities::player::Entity::find()
-        .filter(
-            crate::entities::player::Column::TelegramId
-                .eq(i64::from(user.id))
-                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
-        )
-        .one(conn)
-        .await?
-    else {
-        return Ok(Err("Player doesn't exists, use /start to create".into()));
+    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+        Ok(player) => player,
+        Err(err) => return Ok(Err(err)),
     };
 
     client
         .execute(
             SendMessage::new(
-                chat_id,
-                format!("Your remaining budget is {}€", player.budget),
+                chat.id,
+                match chat.lang {
+                    Lang::En => format!("Your remaining budget is {}€", player.budget),
+                    Lang::It => format!("Il tuo budget rimanente è {}€", player.budget),
+                },
             )
             .with_reply_to_message_id(message_id),
         )

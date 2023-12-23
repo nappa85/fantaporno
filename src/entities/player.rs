@@ -3,6 +3,8 @@ use futures_util::stream::TryStreamExt;
 use sea_orm::{entity::prelude::*, ActiveValue, Condition, QueryOrder, StreamTrait};
 use std::{collections::HashMap, future};
 
+use super::chat::Lang;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "players")]
 pub struct Model {
@@ -18,11 +20,19 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::team::Entity")]
     Team,
+    #[sea_orm(has_many = "super::chat::Entity")]
+    Chat,
 }
 
 impl Related<super::team::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Team.def()
+    }
+}
+
+impl Related<super::chat::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Chat.def()
     }
 }
 
@@ -89,12 +99,12 @@ impl Model {
 
 pub async fn insert<C: ConnectionTrait>(
     conn: &C,
-    telegram_id: i64,
+    telegram_id: impl Into<i64>,
     chat_id: i64,
     name: String,
 ) -> Result<Model, DbErr> {
     ActiveModel {
-        telegram_id: ActiveValue::Set(telegram_id),
+        telegram_id: ActiveValue::Set(telegram_id.into()),
         chat_id: ActiveValue::Set(chat_id),
         name: ActiveValue::Set(name),
         budget: ActiveValue::Set(super::BUDGET),
@@ -102,6 +112,30 @@ pub async fn insert<C: ConnectionTrait>(
     }
     .insert(conn)
     .await
+}
+
+pub async fn find<C: ConnectionTrait>(
+    conn: &C,
+    user_id: impl Into<i64>,
+    chat_id: i64,
+    lang: Lang,
+) -> Result<Result<Model, String>, DbErr> {
+    let Some(player) = crate::entities::player::Entity::find()
+        .filter(
+            crate::entities::player::Column::TelegramId
+                .eq(user_id.into())
+                .and(crate::entities::player::Column::ChatId.eq(chat_id)),
+        )
+        .one(conn)
+        .await?
+    else {
+        return Ok(Err(String::from(match lang {
+            Lang::En => "Player doesn't exists, use /start to create",
+            Lang::It => "Giocatore inesistente, usa /start per crearlo",
+        })));
+    };
+
+    Ok(Ok(player))
 }
 
 #[cfg(test)]

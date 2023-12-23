@@ -2,27 +2,34 @@ use chrono::Utc;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, StreamTrait};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, ParseMode, SendMessage},
+    types::{ParseMode, SendMessage},
 };
 
 use crate::Error;
+
+use super::{Chat, Lang};
 
 pub async fn execute<C>(
     client: &Client,
     conn: &C,
     message_id: Option<i64>,
-    chat_id: ChatPeerId,
+    chat: &Chat,
 ) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait + StreamTrait,
 {
     // we can't use `stream` here since `score` would deadlock the connection
     let players = crate::entities::player::Entity::find()
-        .filter(crate::entities::player::Column::ChatId.eq(i64::from(chat_id)))
+        .filter(crate::entities::player::Column::ChatId.eq(chat.id))
         .all(conn)
         .await?;
     let msg = if players.is_empty() {
-        String::from("At the moment there are no players in this chat, use /start to join")
+        String::from(match chat.lang {
+            Lang::En => "At the moment there are no players in this chat, use /start to join",
+            Lang::It => {
+                "Al momento non ci sono giocatori in questa chat, usa /start per cominciare"
+            }
+        })
     } else {
         let now = Utc::now().naive_utc();
         let mut scores = Vec::with_capacity(players.len());
@@ -46,7 +53,7 @@ where
             })
     };
 
-    let message = SendMessage::new(chat_id, msg).with_parse_mode(ParseMode::Markdown);
+    let message = SendMessage::new(chat.id, msg).with_parse_mode(ParseMode::Markdown);
     let message = if let Some(message_id) = message_id {
         message.with_reply_to_message_id(message_id)
     } else {

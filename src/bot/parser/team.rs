@@ -5,31 +5,26 @@ use futures_util::TryStreamExt;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, StreamTrait};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, SendMessage, User},
+    types::{SendMessage, User},
 };
 
 use crate::Error;
+
+use super::{Chat, Lang};
 
 pub async fn execute<C>(
     client: &Client,
     conn: &C,
     user: &User,
     reply_to_message_id: i64,
-    chat_id: ChatPeerId,
+    chat: &Chat,
 ) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait + StreamTrait,
 {
-    let Some(player) = crate::entities::player::Entity::find()
-        .filter(
-            crate::entities::player::Column::TelegramId
-                .eq(i64::from(user.id))
-                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
-        )
-        .one(conn)
-        .await?
-    else {
-        return Ok(Err("Player doesn't exists, use /start to create".into()));
+    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+        Ok(player) => player,
+        Err(err) => return Ok(Err(err)),
     };
 
     let now = Utc::now().naive_utc();
@@ -64,11 +59,17 @@ where
     client
         .execute(
             SendMessage::new(
-                chat_id,
+                chat.id,
                 if list.is_empty() {
-                    String::from("Your team is empty")
+                    String::from(match chat.lang {
+                        Lang::En => "Your team is empty",
+                        Lang::It => "La tua squadra è vuota",
+                    })
                 } else {
-                    format!("Your team is:\n{}", list)
+                    match chat.lang {
+                        Lang::En => format!("Your team is:\n{}", list),
+                        Lang::It => format!("La tua squadra è:\n{}", list),
+                    }
                 },
             )
             .with_reply_to_message_id(reply_to_message_id),

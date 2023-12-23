@@ -5,38 +5,32 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, SendMessage, User},
+    types::{SendMessage, User},
 };
 
 use crate::Error;
+
+use super::{Chat, Lang};
 
 pub async fn execute<C>(
     client: &Client,
     conn: &C,
     user: &User,
     message_id: i64,
-    chat_id: ChatPeerId,
+    chat: &Chat,
     pornstar_name: String,
 ) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let Some(player) = crate::entities::player::Entity::find()
-        .filter(
-            crate::entities::player::Column::TelegramId
-                .eq(i64::from(user.id))
-                .and(crate::entities::player::Column::ChatId.eq(i64::from(chat_id))),
-        )
-        .one(conn)
-        .await?
-    else {
-        return Ok(Err("Player doesn't exists, use /start to create".into()));
+    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+        Ok(player) => player,
+        Err(err) => return Ok(Err(err)),
     };
 
-    let pornstar = match crate::entities::pornstar::search(conn, &pornstar_name).await {
-        Ok(Ok(pornstar)) => pornstar,
-        Ok(Err(err)) => return Ok(Err(err)),
-        Err(err) => return Err(Error::from(err)),
+    let pornstar = match crate::entities::pornstar::search(conn, &pornstar_name, chat.lang).await? {
+        Ok(pornstar) => pornstar,
+        Err(err) => return Ok(Err(err)),
     };
 
     let now = Utc::now().naive_utc();
@@ -49,17 +43,18 @@ where
         .one(conn)
         .await?
     else {
-        return Ok(Err(format!(
-            "Pornstar \"{}\" isn't in your team",
-            pornstar.name,
-        )));
+        return Ok(Err(match chat.lang {
+            Lang::En => format!("Pornstar \"{}\" isn't in your team", pornstar.name),
+            Lang::It => format!(
+                "Il/la pornostar \"{}\" non è nella tua squadra",
+                pornstar.name
+            ),
+        }));
     };
 
-    let Some(cost) = pornstar.get_cost(conn).await? else {
-        return Ok(Err(format!(
-            "Pornstar \"{}\" doesn't have a valutation at the moment",
-            pornstar.name
-        )));
+    let cost = match pornstar.get_cost(conn, chat.lang).await? {
+        Ok(cost) => cost,
+        Err(err) => return Ok(Err(err)),
     };
 
     let txn = conn.begin().await?;
@@ -81,8 +76,11 @@ where
     client
         .execute(
             SendMessage::new(
-                chat_id,
-                format!("Pornstar \"{}\" is now free", pornstar.name),
+                chat.id,
+                match chat.lang {
+                    Lang::En => format!("Pornstar \"{}\" is now free", pornstar.name),
+                    Lang::It => format!("Il/la pornostar \"{}\" è ora libero/a", pornstar.name),
+                },
             )
             .with_reply_to_message_id(message_id),
         )

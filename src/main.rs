@@ -11,7 +11,7 @@ use tokio::{select, sync::Notify, time::sleep};
 mod bot;
 mod entities;
 
-const TOP_800_URL: &str = "https://www.pornhub.com/pornstars/top";
+// const TOP_800_URL: &str = "https://www.pornhub.com/pornstars/top";
 const PORNSTAR_AMATORIAL_URL: &str = "https://www.pornhub.com/pornstars?page=";
 const USER_AGENT: &str = "Tua madre";
 
@@ -65,94 +65,94 @@ async fn main() -> Result<(), Error> {
     }
 }
 
-async fn scrape_top_800<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
-where
-    C: ConnectionTrait + TransactionTrait,
-{
-    let client = Client::new();
-    let list_content = Selector::parse("ul#categoryListContent")?;
-    let rank = Selector::parse("li.index-length")?;
-    let name = Selector::parse("li.index-title a")?;
+// async fn scrape_top_800<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
+// where
+//     C: ConnectionTrait + TransactionTrait,
+// {
+//     let client = Client::new();
+//     let list_content = Selector::parse("ul#categoryListContent")?;
+//     let rank = Selector::parse("li.index-length")?;
+//     let name = Selector::parse("li.index-title a")?;
 
-    let mut error = false;
-    loop {
-        let now = Utc::now();
-        // on error simply wait one hour and retry, else wait next sunday
-        let next_tick = if error {
-            now.date_naive()
-                .and_hms_opt(now.hour(), 0, 0)
-                .ok_or(Error::InvalidNextHour)?
-        } else {
-            now.date_naive()
-                .week(Weekday::Sun)
-                .last_day()
-                .and_hms_opt(23, 0, 0)
-                .ok_or(Error::InvalidNextWeek)?
-        };
-        let next_tick = next_tick
-            .and_local_timezone(Utc)
-            .single()
-            .ok_or(Error::InvalidTimezone)?
-            + Duration::hours(1);
-        sleep((next_tick - now).to_std()?).await;
+//     let mut error = false;
+//     loop {
+//         let now = Utc::now();
+//         // on error simply wait one hour and retry, else wait next sunday
+//         let next_tick = if error {
+//             now.date_naive()
+//                 .and_hms_opt(now.hour(), 0, 0)
+//                 .ok_or(Error::InvalidNextHour)?
+//         } else {
+//             now.date_naive()
+//                 .week(Weekday::Sun)
+//                 .last_day()
+//                 .and_hms_opt(23, 0, 0)
+//                 .ok_or(Error::InvalidNextWeek)?
+//         };
+//         let next_tick = next_tick
+//             .and_local_timezone(Utc)
+//             .single()
+//             .ok_or(Error::InvalidTimezone)?
+//             + Duration::hours(1);
+//         sleep((next_tick - now).to_std()?).await;
 
-        let response = client
-            .get(TOP_800_URL)
-            .header("User-Agent", USER_AGENT)
-            .send()
-            .await?;
-        let text = response.text().await?;
-        let doc = Html::parse_document(&text);
+//         let response = client
+//             .get(TOP_800_URL)
+//             .header("User-Agent", USER_AGENT)
+//             .send()
+//             .await?;
+//         let text = response.text().await?;
+//         let doc = Html::parse_document(&text);
 
-        let txn = conn.begin().await?;
-        error = false;
-        let mut commit = false;
-        for element in doc.select(&list_content) {
-            let Some(rank_el) = element.select(&rank).next() else {
-                commit = false;
-                error = true;
-                break;
-            };
-            let Some(rank) = rank_el
-                .text()
-                .next()
-                .and_then(|rank| rank.trim().parse().ok())
-            else {
-                commit = false;
-                error = true;
-                break;
-            };
-            let Some(name_el) = element.select(&name).next() else {
-                commit = false;
-                error = true;
-                break;
-            };
-            let Some(name) = name_el.text().next().map(str::trim) else {
-                commit = false;
-                error = true;
-                break;
-            };
-            let Some(url) = name_el.value().attr("href") else {
-                commit = false;
-                error = true;
-                break;
-            };
+//         let txn = conn.begin().await?;
+//         error = false;
+//         let mut commit = false;
+//         for element in doc.select(&list_content) {
+//             let Some(rank_el) = element.select(&rank).next() else {
+//                 commit = false;
+//                 error = true;
+//                 break;
+//             };
+//             let Some(rank) = rank_el
+//                 .text()
+//                 .next()
+//                 .and_then(|rank| rank.trim().parse().ok())
+//             else {
+//                 commit = false;
+//                 error = true;
+//                 break;
+//             };
+//             let Some(name_el) = element.select(&name).next() else {
+//                 commit = false;
+//                 error = true;
+//                 break;
+//             };
+//             let Some(name) = name_el.text().next().map(str::trim) else {
+//                 commit = false;
+//                 error = true;
+//                 break;
+//             };
+//             let Some(url) = name_el.value().attr("href") else {
+//                 commit = false;
+//                 error = true;
+//                 break;
+//             };
 
-            let pornstar = entities::pornstar::find_or_insert(&txn, name, url).await?;
+//             let pornstar = entities::pornstar::find_or_insert(&txn, name, url).await?;
 
-            if entities::position::inserted(&txn, pornstar.id, next_tick, rank).await? {
-                commit = true;
-            }
-        }
+//             if entities::position::inserted(&txn, pornstar.id, next_tick, rank).await? {
+//                 commit = true;
+//             }
+//         }
 
-        if commit {
-            txn.commit().await?;
-            notifier.notify_one();
-        } else {
-            txn.rollback().await?;
-        }
-    }
-}
+//         if commit {
+//             txn.commit().await?;
+//             notifier.notify_one();
+//         } else {
+//             txn.rollback().await?;
+//         }
+//     }
+// }
 
 async fn scrape_pornstar_amatorial<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
 where

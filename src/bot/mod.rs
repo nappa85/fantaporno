@@ -1,10 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::{entities::player, Error};
-use sea_orm::{ConnectionTrait, EntityTrait, QuerySelect, StreamTrait, TransactionTrait};
+use crate::{entities::chat, Error};
+use sea_orm::{ConnectionTrait, EntityTrait, StreamTrait, TransactionTrait};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, GetUpdates, Message, MessageData, Text, UpdateType},
+    types::{GetUpdates, Message, MessageData, Text, UpdateType},
 };
 use tokio::{select, sync::Notify};
 
@@ -43,16 +43,19 @@ where
             let Some(chat_id) = update.get_chat_id() else {
                 continue;
             };
+            let Some(user) = update.get_user() else {
+                continue;
+            };
 
-            println!("Update {update:?}");
             if let UpdateType::Message(Message {
                 id,
                 data: MessageData::Text(Text { ref data, .. }),
                 ..
             }) = update.update_type
             {
-                parser::parse_message(client, conn, name, update.get_user(), id, data, chat_id)
-                    .await?
+                parser::parse_message(client, conn, name, user, id, data, chat_id).await?
+            } else {
+                println!("Update {update:?}");
             }
             offset = update.id;
         }
@@ -66,18 +69,11 @@ where
     loop {
         notifier.notified().await;
 
-        let chat_ids = player::Entity::find()
-            .select_only()
-            .column(player::Column::ChatId)
-            .distinct()
-            .into_tuple::<i32>()
-            .all(conn)
-            .await?;
+        // we can't use `stream` here since `chart::execute` would deadlock the connection
+        let chats = chat::Entity::find().all(conn).await?;
 
-        for chat_id in chat_ids {
-            let _ =
-                parser::chart::execute(client, conn, None, ChatPeerId::from(i64::from(chat_id)))
-                    .await?;
+        for chat in chats {
+            let _ = parser::chart::execute(client, conn, None, &chat).await?;
         }
     }
 }
