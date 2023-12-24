@@ -12,6 +12,7 @@ pub mod chart;
 mod chat;
 mod create;
 mod help;
+mod history;
 mod quote;
 mod sell;
 mod team;
@@ -69,6 +70,17 @@ where
             });
 
             sell::execute(client, conn, user, message_id, &chat, pornstar_name).await?
+        }
+        Some("/history") => {
+            let pornstar_name = iter.fold(String::new(), |mut buf, chunk| {
+                if !buf.is_empty() {
+                    buf.push(' ');
+                }
+                buf.push_str(chunk);
+                buf
+            });
+
+            history::execute(client, conn, user, message_id, &chat, pornstar_name).await?
         }
         Some("/set_chat_lang") => {
             let lang = iter.fold(String::new(), |mut buf, chunk| {

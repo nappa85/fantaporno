@@ -39,22 +39,30 @@ impl Related<super::chat::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    pub async fn history<C: ConnectionTrait + StreamTrait>(
+    pub async fn history<C, I>(
         &self,
         conn: &C,
         date: NaiveDateTime,
-    ) -> Result<Option<HashMap<i32, Vec<i32>>>, DbErr> {
+        pornstar_ids: Option<I>,
+    ) -> Result<Option<HashMap<i32, Vec<super::position::Model>>>, DbErr>
+    where
+        C: ConnectionTrait + StreamTrait,
+        I: IntoIterator<Item = i32>,
+    {
+        let mut filter = super::team::Column::PlayerId
+            .eq(self.id)
+            .and(super::team::Column::StartDate.lte(date))
+            .and(
+                super::team::Column::EndDate
+                    .is_null()
+                    .or(super::team::Column::EndDate.gt(date)),
+            );
+        if let Some(pornstar_ids) = pornstar_ids {
+            filter = filter.and(super::team::Column::PornstarId.is_in(pornstar_ids));
+        }
+
         let teams = super::team::Entity::find()
-            .filter(
-                super::team::Column::PlayerId
-                    .eq(self.id)
-                    .and(super::team::Column::StartDate.lte(date))
-                    .and(
-                        super::team::Column::EndDate
-                            .is_null()
-                            .or(super::team::Column::EndDate.gt(date)),
-                    ),
-            )
+            .filter(filter)
             .stream(conn)
             .await?;
 
@@ -82,9 +90,9 @@ impl Model {
         Ok(Some(
             positions
                 .try_fold(HashMap::new(), |mut pornstars, position| {
-                    let pornstar: &mut Vec<i32> =
+                    let pornstar: &mut Vec<super::position::Model> =
                         pornstars.entry(position.pornstar_id).or_default();
-                    pornstar.push(position.position);
+                    pornstar.push(position);
                     future::ready(Ok(pornstars))
                 })
                 .await?,
@@ -97,7 +105,7 @@ impl Model {
         conn: &C,
         date: NaiveDateTime,
     ) -> Result<i64, DbErr> {
-        let Some(pornstars) = self.history(conn, date).await? else {
+        let Some(pornstars) = self.history(conn, date, None::<[i32; 0]>).await? else {
             return Ok(0);
         };
 
@@ -106,7 +114,7 @@ impl Model {
             .map(|positions| {
                 positions
                     .windows(2)
-                    .map(|window| i64::from(window[0]) - i64::from(window[1]))
+                    .map(|window| i64::from(window[0].position) - i64::from(window[1].position))
                     .sum::<i64>()
             })
             .sum::<i64>())
