@@ -39,19 +39,21 @@ impl Related<super::chat::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    /// recalculate player's score based on entire player history
-    pub async fn score<C: ConnectionTrait + StreamTrait>(
+    pub async fn history<C: ConnectionTrait + StreamTrait>(
         &self,
         conn: &C,
         date: NaiveDateTime,
-    ) -> Result<i64, DbErr> {
+    ) -> Result<Option<HashMap<i32, Vec<i32>>>, DbErr> {
         let teams = super::team::Entity::find()
             .filter(
-                super::team::Column::PlayerId.eq(self.id).and(
-                    super::team::Column::EndDate
-                        .is_null()
-                        .or(super::team::Column::EndDate.gt(date)),
-                ),
+                super::team::Column::PlayerId
+                    .eq(self.id)
+                    .and(super::team::Column::StartDate.lte(date))
+                    .and(
+                        super::team::Column::EndDate
+                            .is_null()
+                            .or(super::team::Column::EndDate.gt(date)),
+                    ),
             )
             .stream(conn)
             .await?;
@@ -68,7 +70,7 @@ impl Model {
             })
             .await?;
         if filter.is_empty() {
-            return Ok(0);
+            return Ok(None);
         }
 
         let positions = super::position::Entity::find()
@@ -77,13 +79,27 @@ impl Model {
             .stream(conn)
             .await?;
 
-        let pornstars = positions
-            .try_fold(HashMap::new(), |mut pornstars, position| {
-                let pornstar: &mut Vec<i32> = pornstars.entry(position.pornstar_id).or_default();
-                pornstar.push(position.position);
-                future::ready(Ok(pornstars))
-            })
-            .await?;
+        Ok(Some(
+            positions
+                .try_fold(HashMap::new(), |mut pornstars, position| {
+                    let pornstar: &mut Vec<i32> =
+                        pornstars.entry(position.pornstar_id).or_default();
+                    pornstar.push(position.position);
+                    future::ready(Ok(pornstars))
+                })
+                .await?,
+        ))
+    }
+
+    /// recalculate player's score based on entire player history
+    pub async fn score<C: ConnectionTrait + StreamTrait>(
+        &self,
+        conn: &C,
+        date: NaiveDateTime,
+    ) -> Result<i64, DbErr> {
+        let Some(pornstars) = self.history(conn, date).await? else {
+            return Ok(0);
+        };
 
         Ok(pornstars
             .values()

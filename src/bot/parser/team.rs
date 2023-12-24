@@ -2,7 +2,9 @@ use std::future;
 
 use chrono::Utc;
 use futures_util::TryStreamExt;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, StreamTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, StreamTrait,
+};
 use tgbot::{
     api::Client,
     types::{SendMessage, User},
@@ -36,22 +38,29 @@ where
                     .or(crate::entities::team::Column::EndDate.lt(now)),
             ),
         )
+        .select_only()
+        .column(crate::entities::team::Column::PornstarId)
+        .into_tuple::<i32>()
         .all(conn)
         .await?;
 
+    let mut costs = crate::entities::pornstar::get_costs(conn, team.clone())
+        .await?
+        .unwrap_or_default();
+
     let list = crate::entities::pornstar::Entity::find()
-        .filter(
-            crate::entities::pornstar::Column::Id
-                .is_in(team.into_iter().map(|team| team.pornstar_id)),
-        )
+        .filter(crate::entities::pornstar::Column::Id.is_in(team))
         .order_by_asc(crate::entities::pornstar::Column::Name)
         .stream(conn)
         .await?
-        .try_fold(String::new(), |mut buf, pornstar| {
-            if !buf.is_empty() {
-                buf.push('\n');
-            }
+        .try_fold(String::new(), move |mut buf, pornstar| {
+            buf.push('\n');
             buf.push_str(&pornstar.name);
+            if let Some(cost) = costs.remove(&pornstar.id) {
+                buf.push_str(" (");
+                buf.push_str(&cost.to_string());
+                buf.push_str("€)");
+            }
             future::ready(Ok(buf))
         })
         .await?;
@@ -67,8 +76,8 @@ where
                     })
                 } else {
                     match chat.lang {
-                        Lang::En => format!("Your team is:\n{}", list),
-                        Lang::It => format!("La tua squadra è:\n{}", list),
+                        Lang::En => format!("Your team is:{}", list),
+                        Lang::It => format!("La tua squadra è:{}", list),
                     }
                 },
             )

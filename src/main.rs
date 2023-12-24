@@ -43,7 +43,7 @@ pub enum Error {
     InvalidPosition,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
     let token = env::var("BOT_TOKEN").map_err(|_| Error::MissingBotToken)?;
     let name = env::var("BOT_NAME").map_err(|_| Error::MissingBotName)?;

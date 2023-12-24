@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use sea_orm::{entity::prelude::*, ActiveValue, QuerySelect};
 
@@ -35,59 +37,19 @@ impl Related<super::team::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
-    async fn get_cost_inner<C: ConnectionTrait>(
-        &self,
-        conn: &C,
-    ) -> Result<Option<u32>, crate::Error> {
-        let Some(max_date) = super::position::Entity::find()
-            .select_only()
-            .column_as(super::position::Column::Date.max(), "max")
-            .into_tuple::<NaiveDateTime>()
-            .one(conn)
-            .await?
-        else {
-            return Ok(None);
-        };
-
-        let Some(position) = super::position::Entity::find()
-            .filter(
-                super::position::Column::PornstarId
-                    .eq(self.id)
-                    .and(super::position::Column::Date.eq(max_date)),
-            )
-            .one(conn)
-            .await?
-        else {
-            return Ok(None);
-        };
-
-        let Some(max_position) = super::position::Entity::find()
-            .filter(super::position::Column::Date.eq(position.date))
-            .select_only()
-            .column_as(super::position::Column::Position.max(), "max")
-            .into_tuple::<u32>()
-            .one(conn)
-            .await?
-        else {
-            return Ok(None);
-        };
-
-        let position =
-            u32::try_from(position.position).map_err(|_| crate::Error::InvalidPosition)?;
-
-        Ok(Some(super::BUDGET * position / max_position))
-    }
-
     pub async fn get_cost<C: ConnectionTrait>(
         &self,
         conn: &C,
         lang: Lang,
     ) -> Result<Result<u32, String>, crate::Error> {
-        match self.get_cost_inner(conn).await? {
+        match get_costs(conn, [self.id])
+            .await?
+            .and_then(|mut costs| costs.remove(&self.id))
+        {
             Some(cost) => Ok(Ok(cost)),
             None => Ok(Err(match lang {
                 Lang::En => format!(
-                    "Pornstar \"{}\" doesn't have a valutation at the moment",
+                    "Pornstar \"{}\" doesn't have a valuation at the moment",
                     self.name
                 ),
                 Lang::It => format!(
@@ -97,6 +59,60 @@ impl Model {
             })),
         }
     }
+}
+
+pub async fn get_costs<C: ConnectionTrait>(
+    conn: &C,
+    ids: impl IntoIterator<Item = i32>,
+) -> Result<Option<HashMap<i32, u32>>, crate::Error> {
+    let Some(max_date) = super::position::Entity::find()
+        .select_only()
+        .column_as(super::position::Column::Date.max(), "max")
+        .into_tuple::<NaiveDateTime>()
+        .one(conn)
+        .await?
+    else {
+        return Ok(None);
+    };
+
+    let positions = super::position::Entity::find()
+        .filter(
+            super::position::Column::PornstarId
+                .is_in(ids)
+                .and(super::position::Column::Date.eq(max_date)),
+        )
+        .all(conn)
+        .await?;
+
+    let Some(max_position) = super::position::Entity::find()
+        .filter(super::position::Column::Date.eq(max_date))
+        .select_only()
+        .column_as(super::position::Column::Position.max(), "max")
+        .into_tuple::<u32>()
+        .one(conn)
+        .await?
+    else {
+        return Ok(None);
+    };
+
+    Ok(Some(
+        positions
+            .into_iter()
+            .map(|position| {
+                let super::position::Model {
+                    pornstar_id,
+                    position,
+                    ..
+                } = position;
+
+                let Ok(position) = u32::try_from(position) else {
+                    return Err(crate::Error::InvalidPosition);
+                };
+
+                Ok((pornstar_id, super::BUDGET * position / max_position))
+            })
+            .collect::<Result<_, _>>()?,
+    ))
 }
 
 pub async fn find_or_insert<C: ConnectionTrait>(
