@@ -5,7 +5,7 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{SendMessage, User},
+    types::{ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -82,7 +82,7 @@ where
                     Lang::It => format!("Il/la pornostar \"{}\" è ora libero/a", pornstar.name),
                 },
             )
-            .with_reply_to_message_id(message_id),
+            .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;
 

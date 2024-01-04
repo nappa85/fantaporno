@@ -1,7 +1,7 @@
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use tgbot::{
     api::Client,
-    types::{SendMessage, User},
+    types::{ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -55,7 +55,7 @@ where
                     Lang::It => "Giocatore creato",
                 },
             )
-            .with_reply_to_message_id(message_id),
+            .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;
 

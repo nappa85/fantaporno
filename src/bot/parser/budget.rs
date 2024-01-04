@@ -1,7 +1,7 @@
 use sea_orm::ConnectionTrait;
 use tgbot::{
     api::Client,
-    types::{SendMessage, User},
+    types::{ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -32,7 +32,7 @@ where
                     Lang::It => format!("Il tuo budget rimanente è {}€", player.budget),
                 },
             )
-            .with_reply_to_message_id(message_id),
+            .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;
 

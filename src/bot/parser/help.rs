@@ -1,6 +1,6 @@
 use tgbot::{
     api::Client,
-    types::{ParseMode, SendMessage},
+    types::{ParseMode, ReplyParameters, SendMessage},
 };
 
 use crate::Error;
@@ -43,7 +43,7 @@ pub async fn execute(client: &Client, message_id: i64, chat: &Chat) -> Result<()
                     Lang::It => HELP_MESSAGE_IT,
                 },
             )
-            .with_reply_to_message_id(message_id)
+            .with_reply_parameters(ReplyParameters::new(message_id))
             .with_parse_mode(ParseMode::Html),
         )
         .await?;

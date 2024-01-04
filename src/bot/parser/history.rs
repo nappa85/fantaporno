@@ -2,7 +2,7 @@ use chrono::Utc;
 use sea_orm::{ConnectionTrait, StreamTrait};
 use tgbot::{
     api::Client,
-    types::{SendMessage, User},
+    types::{ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -72,7 +72,9 @@ where
     };
 
     client
-        .execute(SendMessage::new(chat.id, msg).with_reply_to_message_id(message_id))
+        .execute(
+            SendMessage::new(chat.id, msg).with_reply_parameters(ReplyParameters::new(message_id)),
+        )
         .await?;
 
     Ok(Ok(()))

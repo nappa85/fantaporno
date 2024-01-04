@@ -1,5 +1,8 @@
 use sea_orm::{ActiveModelTrait, ActiveValue, ConnectionTrait};
-use tgbot::{api::Client, types::SendMessage};
+use tgbot::{
+    api::Client,
+    types::{ReplyParameters, SendMessage},
+};
 
 use crate::Error;
 
@@ -39,7 +42,7 @@ where
                     Lang::It => "Lingua impostata",
                 },
             )
-            .with_reply_to_message_id(message_id),
+            .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;
 

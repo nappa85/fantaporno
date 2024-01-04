@@ -7,7 +7,7 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{SendMessage, User},
+    types::{ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -81,7 +81,7 @@ where
                     }
                 },
             )
-            .with_reply_to_message_id(reply_to_message_id),
+            .with_reply_parameters(ReplyParameters::new(reply_to_message_id)),
         )
         .await?;
 

@@ -1,7 +1,7 @@
 use sea_orm::{ConnectionTrait, StreamTrait, TransactionTrait};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, ParseMode, SendMessage, User},
+    types::{ChatPeerId, ParseMode, ReplyParameters, SendMessage, User},
 };
 
 use crate::entities::chat::{Lang, Model as Chat};
@@ -106,7 +106,7 @@ where
                         Lang::It => format!("Errore: {err}"),
                     },
                 )
-                .with_reply_to_message_id(message_id)
+                .with_reply_parameters(ReplyParameters::new(message_id))
                 .with_parse_mode(ParseMode::Markdown),
             )
             .await?;

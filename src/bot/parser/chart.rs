@@ -2,7 +2,7 @@ use chrono::Utc;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, StreamTrait};
 use tgbot::{
     api::Client,
-    types::{ParseMode, SendMessage},
+    types::{ParseMode, ReplyParameters, SendMessage},
 };
 
 use crate::Error;
@@ -55,7 +55,7 @@ where
 
     let message = SendMessage::new(chat.id, msg).with_parse_mode(ParseMode::Markdown);
     let message = if let Some(message_id) = message_id {
-        message.with_reply_to_message_id(message_id)
+        message.with_reply_parameters(ReplyParameters::new(message_id))
     } else {
         message
     };
