@@ -115,7 +115,9 @@ where
         for scrap in scraped {
             if let Some(pornstar_rank) = scrap {
                 for (pornstar_id, rank) in pornstar_rank {
-                    if entities::position::inserted(&txn, pornstar_id, tick, rank).await? {
+                    if entities::position::inserted(&txn, pornstar_id, tick.naive_utc(), rank)
+                        .await?
+                    {
                         commit = true;
                     }
                 }

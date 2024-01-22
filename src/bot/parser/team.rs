@@ -35,7 +35,7 @@ where
             crate::entities::team::Column::PlayerId.eq(player.id).and(
                 crate::entities::team::Column::EndDate
                     .is_null()
-                    .or(crate::entities::team::Column::EndDate.lt(now)),
+                    .or(crate::entities::team::Column::EndDate.gt(now)),
             ),
         )
         .select_only()

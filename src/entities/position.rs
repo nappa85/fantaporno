@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 use sea_orm::{entity::prelude::*, ActiveValue, QueryOrder};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -28,7 +28,7 @@ impl ActiveModelBehavior for ActiveModel {}
 pub async fn inserted<C: ConnectionTrait>(
     conn: &C,
     pornstar_id: i32,
-    date: DateTime<Utc>,
+    date: NaiveDateTime,
     rank: i32,
 ) -> Result<bool, DbErr> {
     let position = Entity::find()
@@ -38,14 +38,27 @@ pub async fn inserted<C: ConnectionTrait>(
         .await?;
 
     let inserted = if let Some(p) = position {
-        rank != p.position
+        match (p.date == date, p.position == rank) {
+            (true, true) => return Ok(false),
+            (true, false) => {
+                ActiveModel {
+                    pornstar_id: ActiveValue::Set(pornstar_id),
+                    date: ActiveValue::Set(date),
+                    ..Default::default()
+                }
+                .delete(conn)
+                .await?;
+                true
+            }
+            (false, diff) => !diff,
+        }
     } else {
         true
     };
 
     ActiveModel {
         pornstar_id: ActiveValue::Set(pornstar_id),
-        date: ActiveValue::Set(date.naive_utc()),
+        date: ActiveValue::Set(date),
         position: ActiveValue::Set(rank),
     }
     .insert(conn)
