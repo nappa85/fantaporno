@@ -34,17 +34,7 @@ where
         })));
     }
 
-    crate::entities::player::insert(
-        conn,
-        user.id,
-        chat.id,
-        if let Some(last_name) = &user.last_name {
-            format!("{} {last_name}", user.first_name)
-        } else {
-            user.first_name.clone()
-        },
-    )
-    .await?;
+    crate::entities::player::insert(conn, user, chat.id).await?;
 
     client
         .execute(

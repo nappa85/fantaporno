@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
@@ -23,7 +25,7 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+    let player = match crate::entities::player::find(conn, user, chat.id, chat.lang).await? {
         Ok(player) => player,
         Err(err) => return Ok(Err(err)),
     };
@@ -58,12 +60,18 @@ where
                 }
             ),
             Lang::It => format!(
-                "Il/la pornostar \"{}\" è già {} squadra",
+                "Il/la pornostar \"{}\" è già {}",
                 pornstar.name,
                 if team.player_id == player.id {
-                    "in una"
+                    Cow::Borrowed("nella tua squadra")
+                } else if let Some(owner) =
+                    crate::entities::player::Entity::find_by_id(team.player_id)
+                        .one(conn)
+                        .await?
+                {
+                    Cow::Owned(format!("nella squadra di {}", owner.tg_link()))
                 } else {
-                    "nella tua"
+                    Cow::Borrowed("in una squadra")
                 }
             ),
         }));

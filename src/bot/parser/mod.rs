@@ -1,10 +1,18 @@
-use sea_orm::{ConnectionTrait, StreamTrait, TransactionTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, StreamTrait, TransactionTrait,
+};
 use tgbot::{
     api::Client,
-    types::{ChatPeerId, ParseMode, ReplyParameters, SendMessage, User},
+    types::{
+        ChatPeerId, ParseMode, ReplyParameters, SendMessage, Text, TextEntities, TextEntity,
+        TextEntityPosition, User,
+    },
 };
 
-use crate::entities::chat::{Lang, Model as Chat};
+use crate::entities::{
+    chat::{Lang, Model as Chat},
+    player,
+};
 
 mod budget;
 mod buy;
@@ -23,7 +31,7 @@ pub async fn parse_message<C>(
     name: &str,
     user: &User,
     message_id: i64,
-    msg: &str,
+    msg: &Text,
     chat_id: ChatPeerId,
 ) -> Result<(), crate::Error>
 where
@@ -31,12 +39,22 @@ where
 {
     let chat = crate::entities::chat::find_or_insert(conn, chat_id).await?;
 
+    let Text {
+        data: msg,
+        entities,
+    } = msg;
+
     let mut iter = msg.split_whitespace();
     let res = match iter.next().map(|msg| msg.strip_suffix(name).unwrap_or(msg)) {
         Some("/help") => help::execute(client, message_id, &chat).await.map(Ok)?,
         Some("/start") => create::execute(client, conn, user, message_id, &chat).await?,
         Some("/budget") => budget::execute(client, conn, user, message_id, &chat).await?,
-        Some("/team") => team::execute(client, conn, user, message_id, &chat).await?,
+        Some("/team") => {
+            let tag = entities
+                .as_ref()
+                .and_then(|entities| Tag::parse_one(msg, entities));
+            team::execute(client, conn, user, tag, message_id, &chat).await?
+        }
         Some("/chart") => chart::execute(client, conn, Some(message_id), &chat).await?,
         Some("/quote") => {
             let pornstar_name = iter.fold(String::new(), |mut buf, chunk| {
@@ -113,4 +131,57 @@ where
     }
 
     Ok(())
+}
+
+enum Tag<'a> {
+    Username(&'a str),
+    UserId(&'a str, i64),
+}
+
+impl<'a> Tag<'a> {
+    fn parse_one(msg: &'a str, entities: &'a TextEntities) -> Option<Self> {
+        entities
+            .into_iter()
+            .filter_map(|entity| match entity {
+                TextEntity::Mention(TextEntityPosition { offset, length }) => Some(Tag::Username(
+                    &msg[usize::try_from(*offset).unwrap()
+                        ..usize::try_from(*offset + *length).unwrap()],
+                )),
+                TextEntity::TextMention {
+                    position: TextEntityPosition { offset, length },
+                    user,
+                    ..
+                } => Some(Tag::UserId(
+                    &msg[usize::try_from(*offset).unwrap()
+                        ..usize::try_from(*offset + *length).unwrap()],
+                    i64::from(user.id),
+                )),
+                _ => None,
+            })
+            .next()
+    }
+
+    async fn load_player<C: ConnectionTrait>(
+        &self,
+        conn: &C,
+        chat_id: i64,
+        lang: Lang,
+    ) -> Result<Result<player::Model, String>, DbErr> {
+        let (tag, expr) = match self {
+            Tag::Username(tag) => (*tag, crate::entities::player::Column::Tag.like(&tag[1..])),
+            Tag::UserId(tag, id) => (*tag, crate::entities::player::Column::TelegramId.eq(*id)),
+        };
+        let Some(player) = player::Entity::find()
+            .filter(expr.and(crate::entities::player::Column::ChatId.eq(chat_id)))
+            .one(conn)
+            .await?
+        else {
+            return Ok(Err(match lang {
+                Lang::En => format!("Player {tag} doesn't exists"),
+                Lang::It => format!("Il giocatore {tag} non esiste"),
+            }));
+        };
+
+        Ok(Ok(player))
+    }
 }

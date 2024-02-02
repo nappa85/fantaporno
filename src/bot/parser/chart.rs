@@ -45,10 +45,7 @@ where
                 if !buf.is_empty() {
                     buf.push('\n');
                 }
-                buf.push_str(&format!(
-                    "[{}](tg://user?id={}) {score}",
-                    player.name, player.id
-                ));
+                buf.push_str(&format!("{} {score}", player.tg_link()));
                 buf
             })
     };

@@ -18,7 +18,7 @@ const HELP_MESSAGE_EN: &str = r#"<a href="https://github.com/nappa85/fantaporno/
 /sell {pornstar} - sell given pornstar
 /set_chat_lang {lang} - set given lang for this chat (at the moment supports only "en" and "it")
 /start - create account
-/team - show player's team"#;
+/team {player} - show player's team"#;
 
 const HELP_MESSAGE_IT: &str = r#"<a href="https://github.com/nappa85/fantaporno/">Fantaporno Bot</a>
 
@@ -31,7 +31,7 @@ const HELP_MESSAGE_IT: &str = r#"<a href="https://github.com/nappa85/fantaporno/
 /sell {pornostar} - vendi il/la pornostar
 /set_chat_lang {lingua} - imposta la lingua per questa chat (al momento supporta solo "en" e "it")
 /start - crea giocatore
-/team - mostra la squadra del giocatore"#;
+/team {giocatore} - mostra la squadra del giocatore"#;
 
 pub async fn execute(client: &Client, message_id: i64, chat: &Chat) -> Result<(), Error> {
     client

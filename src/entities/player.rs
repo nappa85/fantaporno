@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use futures_util::stream::TryStreamExt;
 use sea_orm::{entity::prelude::*, ActiveValue, Condition, QueryOrder, StreamTrait};
 use std::{collections::HashMap, future};
+use tgbot::types::User;
 
 use super::chat::Lang;
 
@@ -11,6 +12,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub telegram_id: i64,
+    pub tag: Option<String>,
     pub chat_id: i64,
     pub name: String,
     pub budget: u32,
@@ -39,6 +41,10 @@ impl Related<super::chat::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 impl Model {
+    pub fn tg_link(&self) -> String {
+        format!("[{}](tg://user?id={})", self.name, self.telegram_id)
+    }
+
     pub async fn history<C, I>(
         &self,
         conn: &C,
@@ -123,14 +129,14 @@ impl Model {
 
 pub async fn insert<C: ConnectionTrait>(
     conn: &C,
-    telegram_id: impl Into<i64>,
+    user: &User,
     chat_id: i64,
-    name: String,
 ) -> Result<Model, DbErr> {
     ActiveModel {
-        telegram_id: ActiveValue::Set(telegram_id.into()),
+        telegram_id: ActiveValue::Set(i64::from(user.id)),
+        tag: ActiveValue::Set(user.username.clone().map(String::from)),
         chat_id: ActiveValue::Set(chat_id),
-        name: ActiveValue::Set(name),
+        name: ActiveValue::Set(get_name(user)),
         budget: ActiveValue::Set(super::BUDGET),
         ..Default::default()
     }
@@ -140,14 +146,14 @@ pub async fn insert<C: ConnectionTrait>(
 
 pub async fn find<C: ConnectionTrait>(
     conn: &C,
-    user_id: impl Into<i64>,
+    user: &User,
     chat_id: i64,
     lang: Lang,
 ) -> Result<Result<Model, String>, DbErr> {
     let Some(player) = crate::entities::player::Entity::find()
         .filter(
             crate::entities::player::Column::TelegramId
-                .eq(user_id.into())
+                .eq(i64::from(user.id))
                 .and(crate::entities::player::Column::ChatId.eq(chat_id)),
         )
         .one(conn)
@@ -159,7 +165,38 @@ pub async fn find<C: ConnectionTrait>(
         })));
     };
 
+    let tag_changed = match (&player.tag, &user.username) {
+        (Some(tag), Some(username)) => username != tag,
+        (Some(_), None) | (None, Some(_)) => true,
+        (None, None) => false,
+    };
+    let name_changed = if let Some(last_name) = &user.last_name {
+        !player.name.starts_with(&user.first_name)
+            || !player.name.ends_with(last_name)
+            || player.name.len() != user.first_name.len() + last_name.len() + 1
+    } else {
+        player.name != user.first_name
+    };
+    if tag_changed || name_changed {
+        ActiveModel {
+            id: ActiveValue::Set(player.id),
+            tag: ActiveValue::Set(user.username.clone().map(String::from)),
+            name: ActiveValue::Set(get_name(user)),
+            ..Default::default()
+        }
+        .update(conn)
+        .await?;
+    }
+
     Ok(Ok(player))
+}
+
+fn get_name(user: &User) -> String {
+    if let Some(last_name) = &user.last_name {
+        format!("{} {last_name}", user.first_name)
+    } else {
+        user.first_name.clone()
+    }
 }
 
 #[cfg(test)]
@@ -171,6 +208,7 @@ pub mod tests {
         [super::Model {
             id: 1,
             telegram_id: 1,
+            tag: None,
             chat_id: 1,
             name: String::from("pippo"),
             budget: 0,

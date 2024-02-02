@@ -7,24 +7,30 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{ReplyParameters, SendMessage, User},
+    types::{ParseMode, ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
 
-use super::{Chat, Lang};
+use super::{Chat, Lang, Tag};
 
 pub async fn execute<C>(
     client: &Client,
     conn: &C,
     user: &User,
+    tag: Option<Tag<'_>>,
     reply_to_message_id: i64,
     chat: &Chat,
 ) -> Result<Result<(), String>, Error>
 where
     C: ConnectionTrait + StreamTrait,
 {
-    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+    let res = if let Some(tag) = tag {
+        tag.load_player(conn, chat.id, chat.lang).await?
+    } else {
+        crate::entities::player::find(conn, user, chat.id, chat.lang).await?
+    };
+    let player = match res {
         Ok(player) => player,
         Err(err) => return Ok(Err(err)),
     };
@@ -69,18 +75,31 @@ where
         .execute(
             SendMessage::new(
                 chat.id,
-                if list.is_empty() {
-                    String::from(match chat.lang {
-                        Lang::En => "Your team is empty",
-                        Lang::It => "La tua squadra è vuota",
-                    })
+                if player.telegram_id == i64::from(user.id) {
+                    if list.is_empty() {
+                        String::from(match chat.lang {
+                            Lang::En => "Your team is empty",
+                            Lang::It => "La tua squadra è vuota",
+                        })
+                    } else {
+                        match chat.lang {
+                            Lang::En => format!("Your team is:{}", list),
+                            Lang::It => format!("La tua squadra è:{}", list),
+                        }
+                    }
+                } else if list.is_empty() {
+                    match chat.lang {
+                        Lang::En => format!("{}'s team is empty", player.tg_link()),
+                        Lang::It => format!("La squadra di {} è vuota", player.tg_link()),
+                    }
                 } else {
                     match chat.lang {
-                        Lang::En => format!("Your team is:{}", list),
-                        Lang::It => format!("La tua squadra è:{}", list),
+                        Lang::En => format!("{}'s team is:{}", player.tg_link(), list),
+                        Lang::It => format!("La squadra di {} è:{}", player.tg_link(), list),
                     }
                 },
             )
+            .with_parse_mode(ParseMode::Markdown)
             .with_reply_parameters(ReplyParameters::new(reply_to_message_id)),
         )
         .await?;

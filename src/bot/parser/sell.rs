@@ -23,7 +23,7 @@ pub async fn execute<C>(
 where
     C: ConnectionTrait + TransactionTrait,
 {
-    let player = match crate::entities::player::find(conn, user.id, chat.id, chat.lang).await? {
+    let player = match crate::entities::player::find(conn, user, chat.id, chat.lang).await? {
         Ok(player) => player,
         Err(err) => return Ok(Err(err)),
     };

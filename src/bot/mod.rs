@@ -4,7 +4,7 @@ use crate::{entities::chat, Error};
 use sea_orm::{ConnectionTrait, EntityTrait, StreamTrait, TransactionTrait};
 use tgbot::{
     api::Client,
-    types::{GetUpdates, Message, MessageData, Text, UpdateType},
+    types::{GetUpdates, Message, MessageData, UpdateType},
 };
 use tokio::{select, sync::Notify};
 
@@ -49,11 +49,11 @@ where
 
             if let UpdateType::Message(Message {
                 id,
-                data: MessageData::Text(Text { ref data, .. }),
+                data: MessageData::Text(ref msg),
                 ..
             }) = update.update_type
             {
-                parser::parse_message(client, conn, name, user, id, data, chat_id).await?
+                parser::parse_message(client, conn, name, user, id, msg, chat_id).await?
             } else {
                 println!("Update {update:?}");
             }
