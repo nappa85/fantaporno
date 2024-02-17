@@ -14,6 +14,8 @@ use crate::entities::{
     player,
 };
 
+const MAX_TEAM_SIZE: i64 = 11;
+
 mod budget;
 mod buy;
 pub mod chart;

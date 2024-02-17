@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
-    TransactionTrait,
+    QuerySelect, TransactionTrait,
 };
 use tgbot::{
     api::Client,
@@ -54,9 +54,15 @@ where
                 "Pornstar \"{}\" is already in {} team",
                 pornstar.name,
                 if team.player_id == player.id {
-                    "your"
+                    Cow::Borrowed("your")
+                } else if let Some(owner) =
+                    crate::entities::player::Entity::find_by_id(team.player_id)
+                        .one(conn)
+                        .await?
+                {
+                    Cow::Owned(format!("{}'s", owner.tg_link()))
                 } else {
-                    "another"
+                    Cow::Borrowed("another")
                 }
             ),
             Lang::It => format!(
@@ -71,7 +77,7 @@ where
                 {
                     Cow::Owned(format!("nella squadra di {}", owner.tg_link()))
                 } else {
-                    Cow::Borrowed("in una squadra")
+                    Cow::Borrowed("in un'altra squadra")
                 }
             ),
         }));
@@ -88,6 +94,27 @@ where
                 "Non hai abbastanza soldi per comprare \"{}\"",
                 pornstar.name
             ),
+        }));
+    }
+
+    let team_size = crate::entities::team::Entity::find()
+        .filter(
+            crate::entities::team::Column::PlayerId.eq(player.id).and(
+                crate::entities::team::Column::EndDate
+                    .is_null()
+                    .or(crate::entities::team::Column::EndDate.gt(now)),
+            ),
+        )
+        .select_only()
+        .column_as(crate::entities::team::Column::PornstarId.count(), "count")
+        .into_tuple::<i64>()
+        .one(conn)
+        .await?;
+
+    if team_size.unwrap_or_default() >= super::MAX_TEAM_SIZE {
+        return Ok(Err(match chat.lang {
+            Lang::En => "Your team already is of the max size".to_owned(),
+            Lang::It => "La tua squadra è già della dimensione massima".to_owned(),
         }));
     }
 

@@ -54,6 +54,11 @@ where
         .await?
         .unwrap_or_default();
 
+    let mut history = player
+        .history(conn, now, None::<[i32; 0]>)
+        .await?
+        .unwrap_or_default();
+
     let list = crate::entities::pornstar::Entity::find()
         .filter(crate::entities::pornstar::Column::Id.is_in(team))
         .order_by_asc(crate::entities::pornstar::Column::Name)
@@ -62,11 +67,29 @@ where
         .try_fold(String::new(), move |mut buf, pornstar| {
             buf.push('\n');
             buf.push_str(&pornstar.name);
-            if let Some(cost) = costs.remove(&pornstar.id) {
-                buf.push_str(" (");
-                buf.push_str(&cost.to_string());
-                buf.push_str("€)");
-            }
+            buf.push_str(" (");
+            let cost = costs.remove(&pornstar.id).as_ref().map(ToString::to_string);
+            let cost = cost.as_deref().unwrap_or("-");
+            buf.push_str(cost);
+            buf.push_str("€ | ");
+            let history = history.remove(&pornstar.id).map(|positions| {
+                let pos_mov = positions
+                    .first()
+                    .map(|position| position.position)
+                    .unwrap_or_default()
+                    - positions
+                        .last()
+                        .map(|position| position.position)
+                        .unwrap_or_default();
+                if pos_mov >= 0 {
+                    format!("+{pos_mov}")
+                } else {
+                    pos_mov.to_string()
+                }
+            });
+            let history = history.as_deref().unwrap_or("-");
+            buf.push_str(history);
+            buf.push(')');
             future::ready(Ok(buf))
         })
         .await?;

@@ -110,7 +110,7 @@ impl Model {
         &self,
         conn: &C,
         date: NaiveDateTime,
-    ) -> Result<i64, DbErr> {
+    ) -> Result<i32, DbErr> {
         let Some(pornstars) = self.history(conn, date, None::<[i32; 0]>).await? else {
             return Ok(0);
         };
@@ -119,11 +119,15 @@ impl Model {
             .values()
             .map(|positions| {
                 positions
-                    .windows(2)
-                    .map(|window| i64::from(window[0].position) - i64::from(window[1].position))
-                    .sum::<i64>()
+                    .first()
+                    .map(|position| position.position)
+                    .unwrap_or_default()
+                    - positions
+                        .last()
+                        .map(|position| position.position)
+                        .unwrap_or_default()
             })
-            .sum::<i64>())
+            .sum::<i32>())
     }
 }
 

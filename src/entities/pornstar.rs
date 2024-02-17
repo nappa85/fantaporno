@@ -172,7 +172,7 @@ pub async fn search<C: ConnectionTrait>(
                         Lang::It => "Quale intendevi?",
                     }),
                     |mut buf, pornstar| {
-                        buf.push_str("\n* `");
+                        buf.push_str("\n- `");
                         buf.push_str(&pornstar.name);
                         buf.push('`');
                         buf
