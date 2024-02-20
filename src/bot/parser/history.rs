@@ -1,4 +1,3 @@
-use chrono::Utc;
 use sea_orm::{ConnectionTrait, StreamTrait};
 use tgbot::{
     api::Client,
@@ -30,12 +29,10 @@ where
         Err(err) => return Ok(Err(err)),
     };
 
-    let now = Utc::now().naive_utc();
-    let history = player.history(conn, now, Some([pornstar.id])).await?;
+    let mut history = player.history(conn, Some([pornstar.id])).await?;
 
-    let msg = if let Some(positions) = history.and_then(|mut history| history.remove(&pornstar.id))
-    {
-        positions.windows(2).rev().take(21).fold(
+    let msg = if let Some(positions) = history.remove(&pornstar.id) {
+        positions.scores().rev().take(20).fold(
             match chat.lang {
                 Lang::En => format!("Pornstar \"{}\" last 20 contributions:", pornstar.name),
                 Lang::It => format!(
@@ -43,11 +40,10 @@ where
                     pornstar.name
                 ),
             },
-            |mut buf, window| {
+            |mut buf, (date, points)| {
                 buf.push('\n');
-                buf.push_str(&window[1].date.format("%Y-%m-%d").to_string());
+                buf.push_str(&date.format("%Y-%m-%d").to_string());
                 buf.push(' ');
-                let points = i64::from(window[0].position) - i64::from(window[1].position);
                 if points >= 0 {
                     buf.push('+');
                 }

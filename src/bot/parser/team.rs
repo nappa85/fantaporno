@@ -54,10 +54,7 @@ where
         .await?
         .unwrap_or_default();
 
-    let mut history = player
-        .history(conn, now, None::<[i32; 0]>)
-        .await?
-        .unwrap_or_default();
+    let mut history = player.history(conn, None::<[i32; 0]>).await?;
 
     let list = crate::entities::pornstar::Entity::find()
         .filter(crate::entities::pornstar::Column::Id.is_in(team))
@@ -73,14 +70,7 @@ where
             buf.push_str(cost);
             buf.push_str("€ | ");
             let history = history.remove(&pornstar.id).map(|positions| {
-                let pos_mov = positions
-                    .first()
-                    .map(|position| position.position)
-                    .unwrap_or_default()
-                    - positions
-                        .last()
-                        .map(|position| position.position)
-                        .unwrap_or_default();
+                let pos_mov = positions.score();
                 if pos_mov >= 0 {
                     format!("+{pos_mov}")
                 } else {

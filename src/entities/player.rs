@@ -1,7 +1,8 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDateTime;
 use futures_util::stream::TryStreamExt;
-use sea_orm::{entity::prelude::*, ActiveValue, Condition, QueryOrder, StreamTrait};
-use std::{collections::HashMap, future};
+use sea_orm::{entity::prelude::*, ActiveValue, Statement, StreamTrait};
 use tgbot::types::User;
 
 use super::chat::Lang;
@@ -48,86 +49,65 @@ impl Model {
     pub async fn history<C, I>(
         &self,
         conn: &C,
-        date: NaiveDateTime,
         pornstar_ids: Option<I>,
-    ) -> Result<Option<HashMap<i32, Vec<super::position::Model>>>, DbErr>
+    ) -> Result<HashMap<i32, History>, DbErr>
     where
         C: ConnectionTrait + StreamTrait,
         I: IntoIterator<Item = i32>,
+        <I as IntoIterator>::IntoIter: ExactSizeIterator,
     {
-        let mut filter = super::team::Column::PlayerId
-            .eq(self.id)
-            .and(super::team::Column::StartDate.lte(date))
-            .and(
-                super::team::Column::EndDate
-                    .is_null()
-                    .or(super::team::Column::EndDate.gt(date)),
-            );
+        // fucking ORM making complex queries a nightmare
+        let mut query = String::from("SELECT t.start_date, p.pornstar_id, p.date, p.position FROM teams t
+        INNER JOIN positions p ON p.pornstar_id = t.pornstar_id AND p.date >= t.start_date AND (t.end_date IS NULL OR p.date <= t.end_date)
+        WHERE t.player_id = ?");
+        let mut params = vec![Value::from(self.id)];
         if let Some(pornstar_ids) = pornstar_ids {
-            filter = filter.and(super::team::Column::PornstarId.is_in(pornstar_ids));
+            let iter = pornstar_ids.into_iter();
+            query.push_str(&format!(
+                " AND t.pornstar_id IN ({})",
+                vec!["?"; iter.len()].join(", ")
+            ));
+            params.extend(iter.map(Value::from));
         }
 
-        let teams = super::team::Entity::find()
-            .filter(filter)
-            .stream(conn)
-            .await?;
-
-        let filter = teams
-            .try_fold(Condition::any(), |condition, team| {
-                let cond = super::position::Column::PornstarId.eq(team.pornstar_id);
-                let cond = if let Some(end_date) = team.end_date {
-                    cond.and(super::position::Column::Date.between(team.start_date, end_date))
-                } else {
-                    cond.and(super::position::Column::Date.gte(team.start_date))
-                };
-                future::ready(Ok(condition.add(cond)))
+        let stmt = Statement::from_sql_and_values(conn.get_database_backend(), query, params);
+        conn.stream(stmt)
+            .await?
+            .try_fold(HashMap::new(), |mut pornstars, row| async move {
+                let (start_date, pornstar_id, date, position) = row.try_get_many_by_index()?;
+                let pornstar: &mut History = pornstars.entry(pornstar_id).or_default();
+                pornstar.push(start_date, date, position);
+                Ok(pornstars)
             })
-            .await?;
-        if filter.is_empty() {
-            return Ok(None);
-        }
-
-        let positions = super::position::Entity::find()
-            .filter(filter)
-            .order_by_asc(super::position::Column::Date)
-            .stream(conn)
-            .await?;
-
-        Ok(Some(
-            positions
-                .try_fold(HashMap::new(), |mut pornstars, position| {
-                    let pornstar: &mut Vec<super::position::Model> =
-                        pornstars.entry(position.pornstar_id).or_default();
-                    pornstar.push(position);
-                    future::ready(Ok(pornstars))
-                })
-                .await?,
-        ))
+            .await
     }
 
     /// recalculate player's score based on entire player history
-    pub async fn score<C: ConnectionTrait + StreamTrait>(
-        &self,
-        conn: &C,
-        date: NaiveDateTime,
-    ) -> Result<i32, DbErr> {
-        let Some(pornstars) = self.history(conn, date, None::<[i32; 0]>).await? else {
-            return Ok(0);
-        };
+    pub async fn score<C: ConnectionTrait + StreamTrait>(&self, conn: &C) -> Result<i32, DbErr> {
+        let pornstars = self.history(conn, None::<[i32; 0]>).await?;
 
-        Ok(pornstars
-            .values()
-            .map(|positions| {
-                positions
-                    .first()
-                    .map(|position| position.position)
-                    .unwrap_or_default()
-                    - positions
-                        .last()
-                        .map(|position| position.position)
-                        .unwrap_or_default()
-            })
-            .sum::<i32>())
+        Ok(pornstars.values().map(History::score).sum::<i32>())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct History(Vec<(NaiveDateTime, NaiveDateTime, i32)>);
+
+impl History {
+    fn push(&mut self, start_date: NaiveDateTime, date: NaiveDateTime, position: i32) {
+        self.0.push((start_date, date, position));
+    }
+
+    pub fn scores(&self) -> impl DoubleEndedIterator<Item = (NaiveDateTime, i32)> + '_ {
+        self.0.windows(2).filter_map(|window| {
+            let (start_date0, _, position0) = window[0];
+            let (start_date1, date, position1) = window[1];
+            (start_date0 == start_date1).then_some((date, position0 - position1))
+        })
+    }
+
+    pub fn score(&self) -> i32 {
+        self.scores().map(|(_, i)| i).sum::<i32>()
     }
 }
 
@@ -205,7 +185,6 @@ fn get_name(user: &User) -> String {
 
 #[cfg(test)]
 pub mod tests {
-    use chrono::Utc;
     use sea_orm::{DbBackend, EntityTrait, MockDatabase};
 
     pub fn mock_player() -> [super::Model; 1] {
@@ -233,7 +212,7 @@ pub mod tests {
             .await
             .unwrap()
             .unwrap();
-        let score = player.score(&conn, Utc::now().naive_utc()).await.unwrap();
+        let score = player.score(&conn).await.unwrap();
         assert_eq!(score, 9);
     }
 
@@ -250,7 +229,7 @@ pub mod tests {
             .await
             .unwrap()
             .unwrap();
-        let score = player.score(&conn, Utc::now().naive_utc()).await.unwrap();
+        let score = player.score(&conn).await.unwrap();
         assert_eq!(score, 0);
     }
 }

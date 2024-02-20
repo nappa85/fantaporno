@@ -1,4 +1,3 @@
-use chrono::Utc;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, StreamTrait};
 use tgbot::{
     api::Client,
@@ -31,10 +30,9 @@ where
             }
         })
     } else {
-        let now = Utc::now().naive_utc();
         let mut scores = Vec::with_capacity(players.len());
         for player in players {
-            let score = player.score(conn, now).await?;
+            let score = player.score(conn).await?;
             scores.push((player, score));
         }
         scores.sort_unstable_by(|a, b| a.1.cmp(&b.1));
