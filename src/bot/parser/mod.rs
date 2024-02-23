@@ -25,6 +25,7 @@ mod help;
 mod history;
 mod quote;
 mod sell;
+mod stats;
 mod team;
 
 pub async fn parse_message<C>(
@@ -112,6 +113,10 @@ where
             });
 
             chat::execute(client, conn, message_id, &chat, lang).await?
+        }
+        Some("/stats") => {
+            let field = iter.next();
+            stats::execute(client, conn, field, message_id, &chat).await?
         }
         _ => return Ok(()),
     };
