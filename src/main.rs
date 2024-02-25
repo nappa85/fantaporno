@@ -42,6 +42,8 @@ pub enum Error {
     TelegramExec(#[from] ExecuteError),
     #[error("Invalid position")]
     InvalidPosition,
+    #[error("Plotter error {0}")]
+    Plotter(Box<dyn std::error::Error>),
 }
 
 #[tokio::main(flavor = "current_thread")]
