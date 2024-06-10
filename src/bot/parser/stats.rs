@@ -36,6 +36,18 @@ enum Sort {
     PerDay,
 }
 
+impl Sort {
+    fn dir(&self) -> &'static str {
+        match self {
+            Sort::Min => "asc",
+            Sort::Max => "desc",
+            Sort::Avg => "asc",
+            Sort::Diff => "desc",
+            Sort::PerDay => "desc",
+        }
+    }
+}
+
 impl<'a> TryFrom<&'a str> for Sort {
     type Error = &'a str;
 
@@ -90,8 +102,8 @@ where
     inner join positions p on pp.id = p.pornstar_id group by pp.id) sub
     inner join positions start on sub.id = start.pornstar_id AND start.date = sub.min_date
     inner join positions end on sub.id = end.pornstar_id and end.date = sub.max_date
-    order by {sort} desc
-    limit 10");
+    order by {sort} {}
+    limit 10", sort.dir());
 
     let stmt = Statement::from_string(conn.get_database_backend(), query);
     let stats = conn

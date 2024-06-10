@@ -13,8 +13,11 @@ plotters = { version = "0.3.3", default_features = false, features = ["bitmap_ba
 reqwest = "0.11.23"
 scraper = "0.18.1"
 sea-orm = { version = "0.12.10", features = ["macros", "sqlx-sqlite", "runtime-tokio-rustls"] }
+stream_throttle = "0.5.1"
 thiserror = "1.0.51"
 tgbot = "0.20.0"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.35.1", features = ["macros", "rt", "rt-multi-thread", "fs"] }
 
 [dev-dependencies]

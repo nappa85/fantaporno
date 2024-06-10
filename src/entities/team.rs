@@ -36,13 +36,13 @@ impl ActiveModelBehavior for ActiveModel {}
 
 #[cfg(test)]
 pub mod tests {
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
 
     pub fn mock_team() -> [super::Model; 1] {
         [super::Model {
             player_id: 1,
             pornstar_id: 1,
-            start_date: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            start_date: DateTime::from_timestamp(0, 0).unwrap().naive_utc(),
             end_date: None,
         }]
     }

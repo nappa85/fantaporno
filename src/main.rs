@@ -1,14 +1,16 @@
 use std::{env, sync::Arc};
 
 use chrono::{Duration, NaiveDateTime, OutOfRangeError, Utc};
-use futures_util::future::try_join_all;
+use futures_util::{stream, StreamExt, TryStreamExt};
 use reqwest::Client;
 use scraper::{error::SelectorErrorKind, Html, Selector};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, Database, DbErr, EntityTrait, QuerySelect, TransactionTrait,
 };
+use stream_throttle::{ThrottlePool, ThrottleRate, ThrottledStream};
 use tgbot::api::{ClientError, ExecuteError};
 use tokio::{select, sync::Notify, time::sleep};
+use tracing::info;
 
 mod bot;
 mod entities;
@@ -48,6 +50,8 @@ pub enum Error {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
+    tracing_subscriber::fmt::init();
+
     let token = env::var("BOT_TOKEN").map_err(|_| Error::MissingBotToken)?;
     let name = env::var("BOT_NAME").map_err(|_| Error::MissingBotName)?;
     let name = format!("@{}", name.strip_prefix('@').unwrap_or(name.as_str()));
@@ -76,43 +80,59 @@ where
     let name = Selector::parse("img.pornstarThumb").unwrap();
     let link = Selector::parse("a.pornstarLink").unwrap();
 
+    let rate = ThrottleRate::new(1, std::time::Duration::from_secs(60));
+    let pool = ThrottlePool::new(rate);
+
     loop {
         let last_scrape = entities::position::Entity::find()
             .select_only()
             .column_as(entities::position::Column::Date.max(), "date")
-            .into_tuple::<NaiveDateTime>()
+            .into_tuple::<Option<NaiveDateTime>>()
             .one(conn)
             .await?;
         let now = Utc::now();
-        let tick = if now.naive_utc() - last_scrape.unwrap_or_default() < Duration::days(1) {
-            // // wait next sunday
-            // let next_tick = now
-            //     .date_naive()
-            //     .week(Weekday::Sun)
-            //     .last_day()
-            //     .and_hms_opt(23, 0, 0)
-            //     .ok_or(Error::InvalidNextWeek)?;
-            // wait until tomorrow
-            let next_tick = now
-                .date_naive()
-                .and_hms_opt(23, 0, 0)
-                .ok_or(Error::InvalidNextDay)?;
-            let next_tick = next_tick
-                .and_local_timezone(Utc)
-                .single()
-                .ok_or(Error::InvalidTimezone)?
-                + Duration::hours(1);
-            sleep((next_tick - now).to_std()?).await;
-            next_tick
-        } else {
-            now
-        };
+        let tick =
+            if now.naive_utc() - last_scrape.flatten().unwrap_or_default() < Duration::days(1) {
+                // // wait next sunday
+                // let next_tick = now
+                //     .date_naive()
+                //     .week(Weekday::Sun)
+                //     .last_day()
+                //     .and_hms_opt(23, 0, 0)
+                //     .ok_or(Error::InvalidNextWeek)?;
+                // wait until tomorrow
+                let next_tick = now
+                    .date_naive()
+                    .and_hms_opt(23, 0, 0)
+                    .ok_or(Error::InvalidNextDay)?;
+                let next_tick = next_tick
+                    .and_local_timezone(Utc)
+                    .single()
+                    .ok_or(Error::InvalidTimezone)?
+                    + Duration::hours(1);
+                sleep((next_tick - now).to_std()?).await;
+                next_tick
+            } else {
+                now
+            };
 
         let txn = conn.begin().await?;
-        let scraped = try_join_all((1..=16).map(|page| {
-            scrape_pornstar_amatorial_page(&txn, &client, &list_content, &rank, &name, &link, page)
-        }))
-        .await?;
+        let scraped = stream::iter(1..=16)
+            .throttle(pool.clone())
+            .then(|page| {
+                scrape_pornstar_amatorial_page(
+                    &txn,
+                    &client,
+                    &list_content,
+                    &rank,
+                    &name,
+                    &link,
+                    page,
+                )
+            })
+            .try_collect::<Vec<_>>()
+            .await?;
+
         let mut commit = false;
         for scrap in scraped {
             if let Some(pornstar_rank) = scrap {
@@ -150,6 +170,7 @@ async fn scrape_pornstar_amatorial_page<C>(
 where
     C: ConnectionTrait,
 {
+    info!("scraping page {page}");
     let response = client
         .get(format!("{PORNSTAR_AMATORIAL_URL}{page}"))
         .header("User-Agent", USER_AGENT)
