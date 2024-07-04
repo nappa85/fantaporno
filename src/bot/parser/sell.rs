@@ -5,7 +5,7 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{ReplyParameters, SendMessage, User},
+    types::{ParseMode, ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -44,10 +44,10 @@ where
         .await?
     else {
         return Ok(Err(match chat.lang {
-            Lang::En => format!("Pornstar \"{}\" isn't in your team", pornstar.name),
+            Lang::En => format!("Pornstar \"{}\" isn't in your team", pornstar.link()),
             Lang::It => format!(
                 "Il/la pornostar \"{}\" non è nella tua squadra",
-                pornstar.name
+                pornstar.link()
             ),
         }));
     };
@@ -78,10 +78,11 @@ where
             SendMessage::new(
                 chat.id,
                 match chat.lang {
-                    Lang::En => format!("Pornstar \"{}\" is now free", pornstar.name),
-                    Lang::It => format!("Il/la pornostar \"{}\" è ora libero/a", pornstar.name),
+                    Lang::En => format!("Pornstar \"{}\" is now free", pornstar.link()),
+                    Lang::It => format!("Il/la pornostar \"{}\" è ora libero/a", pornstar.link()),
                 },
             )
+            .with_parse_mode(ParseMode::Markdown)
             .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;

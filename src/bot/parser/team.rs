@@ -63,7 +63,7 @@ where
         .await?
         .try_fold(String::new(), move |mut buf, pornstar| {
             buf.push('\n');
-            buf.push_str(&pornstar.name);
+            buf.push_str(&pornstar.link());
             buf.push_str(" (");
             let cost = costs.remove(&pornstar.id).as_ref().map(ToString::to_string);
             let cost = cost.as_deref().unwrap_or("-");

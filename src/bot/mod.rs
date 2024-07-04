@@ -1,9 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{entities::chat, Error};
-use sea_orm::{ConnectionTrait, EntityTrait, StreamTrait, TransactionTrait};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ConnectionTrait, EntityTrait, StreamTrait, TransactionTrait,
+};
 use tgbot::{
-    api::Client,
+    api::{Client, ExecuteError},
     types::{GetUpdates, Message, MessageData, UpdateType},
 };
 use tokio::{select, sync::Notify};
@@ -73,7 +75,21 @@ where
         let chats = chat::Entity::find().all(conn).await?;
 
         for chat in chats {
-            let _ = parser::chart::execute(client, conn, None, &chat).await?;
+            if let Err(err) = parser::chart::execute(client, conn, None, &chat).await {
+                if let super::Error::TelegramExec(ExecuteError::Response(response_error)) = &err {
+                    // if response_error.description() == "Forbidden: bot was blocked by the user" {
+                    if response_error.error_code() == Some(403) {
+                        chat::ActiveModel {
+                            id: ActiveValue::Set(chat.id),
+                            ..Default::default()
+                        }
+                        .delete(conn)
+                        .await?;
+                        continue;
+                    }
+                }
+                return Err(err);
+            }
         }
     }
 }

@@ -7,7 +7,9 @@ use plotters::{
 use sea_orm::{ConnectionTrait, StreamTrait};
 use tgbot::{
     api::Client,
-    types::{mime, InputFile, InputFileReader, ReplyParameters, SendMessage, SendPhoto, User},
+    types::{
+        mime, InputFile, InputFileReader, ParseMode, ReplyParameters, SendMessage, SendPhoto, User,
+    },
 };
 
 use crate::Error;
@@ -145,17 +147,18 @@ where
     } else {
         let msg = match chat.lang {
             Lang::En => {
-                format!("Pornstar \"{}\" never made points for you", pornstar.name)
+                format!("Pornstar \"{}\" never made points for you", pornstar.link())
             }
             Lang::It => format!(
                 "Il/la pornostar \"{}\" non ha mai generato punti per te",
-                pornstar.name
+                pornstar.link()
             ),
         };
 
         client
             .execute(
                 SendMessage::new(chat.id, msg)
+                    .with_parse_mode(ParseMode::Markdown)
                     .with_reply_parameters(ReplyParameters::new(message_id)),
             )
             .await?;

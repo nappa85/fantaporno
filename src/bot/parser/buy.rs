@@ -7,7 +7,7 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{ReplyParameters, SendMessage, User},
+    types::{ParseMode, ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -52,7 +52,7 @@ where
         return Ok(Err(match chat.lang {
             Lang::En => format!(
                 "Pornstar \"{}\" is already in {} team",
-                pornstar.name,
+                pornstar.link(),
                 if team.player_id == player.id {
                     Cow::Borrowed("your")
                 } else if let Some(owner) =
@@ -67,7 +67,7 @@ where
             ),
             Lang::It => format!(
                 "Il/la pornostar \"{}\" è già {}",
-                pornstar.name,
+                pornstar.link(),
                 if team.player_id == player.id {
                     Cow::Borrowed("nella tua squadra")
                 } else if let Some(owner) =
@@ -89,10 +89,13 @@ where
     };
     if cost > player.budget {
         return Ok(Err(match chat.lang {
-            Lang::En => format!("You don't have enough balance to buy \"{}\"", pornstar.name),
+            Lang::En => format!(
+                "You don't have enough balance to buy \"{}\"",
+                pornstar.link()
+            ),
             Lang::It => format!(
                 "Non hai abbastanza soldi per comprare \"{}\"",
-                pornstar.name
+                pornstar.link()
             ),
         }));
     }
@@ -144,13 +147,14 @@ where
             SendMessage::new(
                 chat.id,
                 match chat.lang {
-                    Lang::En => format!("Pornstar \"{}\" now is in your team", pornstar.name),
+                    Lang::En => format!("Pornstar \"{}\" now is in your team", pornstar.link()),
                     Lang::It => format!(
                         "Il/la pornostar \"{}\" ora è nella tua squadra",
-                        pornstar.name
+                        pornstar.link()
                     ),
                 },
             )
+            .with_parse_mode(ParseMode::Markdown)
             .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;

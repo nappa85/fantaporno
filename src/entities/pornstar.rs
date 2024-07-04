@@ -14,6 +14,12 @@ pub struct Model {
     pub url: String,
 }
 
+impl Model {
+    pub fn link(&self) -> String {
+        format!("[{}](https://pornhub.com{})", self.name, self.url)
+    }
+}
+
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(has_many = "super::position::Entity")]
@@ -120,12 +126,19 @@ pub async fn find_or_insert<C: ConnectionTrait>(
     name: &str,
     url: &str,
 ) -> Result<Model, DbErr> {
-    let pornstar = Entity::find()
-        .filter(Column::Name.eq(name).and(Column::Url.eq(url)))
-        .one(conn)
-        .await?;
+    let pornstar = Entity::find().filter(Column::Url.eq(url)).one(conn).await?;
     if let Some(p) = pornstar {
-        return Ok(p);
+        return if p.name == name {
+            Ok(p)
+        } else {
+            ActiveModel {
+                id: ActiveValue::Set(p.id),
+                name: ActiveValue::Set(name.to_owned()),
+                ..Default::default()
+            }
+            .update(conn)
+            .await
+        };
     }
 
     ActiveModel {

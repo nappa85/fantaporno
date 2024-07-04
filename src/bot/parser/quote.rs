@@ -1,7 +1,7 @@
 use sea_orm::{ConnectionTrait, TransactionTrait};
 use tgbot::{
     api::Client,
-    types::{ReplyParameters, SendMessage},
+    types::{ParseMode, ReplyParameters, SendMessage},
 };
 
 use crate::Error;
@@ -33,13 +33,14 @@ where
             SendMessage::new(
                 chat.id,
                 match chat.lang {
-                    Lang::En => format!("Pornstar \"{}\" value is {cost}€", pornstar.name),
+                    Lang::En => format!("Pornstar \"{}\" value is {cost}€", pornstar.link()),
                     Lang::It => format!(
                         "Il valore del/della pornostar \"{}\" è {cost}€",
-                        pornstar.name
+                        pornstar.link()
                     ),
                 },
             )
+            .with_parse_mode(ParseMode::Markdown)
             .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;

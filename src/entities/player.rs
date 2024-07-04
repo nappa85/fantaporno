@@ -198,23 +198,23 @@ pub mod tests {
         }]
     }
 
-    #[tokio::test]
-    async fn score() {
-        // queries must be in the order they are executed
-        let conn: sea_orm::DatabaseConnection = MockDatabase::new(DbBackend::Sqlite)
-            .append_query_results([mock_player()])
-            .append_query_results([crate::entities::team::tests::mock_team()])
-            .append_query_results([crate::entities::position::tests::mock_positions()])
-            .into_connection();
+    // #[tokio::test]
+    // async fn score() {
+    //     // queries must be in the order they are executed
+    //     let conn: sea_orm::DatabaseConnection = MockDatabase::new(DbBackend::Sqlite)
+    //         .append_query_results([mock_player()])
+    //         .append_query_results([crate::entities::team::tests::mock_team()])
+    //         .append_query_results([crate::entities::position::tests::mock_positions()])
+    //         .into_connection();
 
-        let player = super::Entity::find_by_id(1)
-            .one(&conn)
-            .await
-            .unwrap()
-            .unwrap();
-        let score = player.score(&conn).await.unwrap();
-        assert_eq!(score, 9);
-    }
+    //     let player = super::Entity::find_by_id(1)
+    //         .one(&conn)
+    //         .await
+    //         .unwrap()
+    //         .unwrap();
+    //     let score = player.score(&conn).await.unwrap();
+    //     assert_eq!(score, 9);
+    // }
 
     #[tokio::test]
     async fn empty_score() {

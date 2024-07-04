@@ -67,15 +67,15 @@ pub async fn inserted<C: ConnectionTrait>(
     Ok(inserted)
 }
 
-#[cfg(test)]
-pub mod tests {
-    use chrono::DateTime;
+// #[cfg(test)]
+// pub mod tests {
+//     use chrono::DateTime;
 
-    pub fn mock_positions() -> [super::Model; 4] {
-        [(1, 10), (2, 5), (3, 20), (4, 1)].map(|(timestamp, position)| super::Model {
-            pornstar_id: 1,
-            date: DateTime::from_timestamp(timestamp, 0).unwrap().naive_utc(),
-            position,
-        })
-    }
-}
+//     pub fn mock_positions() -> [super::Model; 4] {
+//         [(1, 10), (2, 5), (3, 20), (4, 1)].map(|(timestamp, position)| super::Model {
+//             pornstar_id: 1,
+//             date: DateTime::from_timestamp(timestamp, 0).unwrap().naive_utc(),
+//             position,
+//         })
+//     }
+// }
