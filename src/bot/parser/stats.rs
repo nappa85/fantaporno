@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use chrono::{NaiveDate, NaiveDateTime};
 use futures_util::{StreamExt, TryStreamExt};
-use sea_orm::{ConnectionTrait, DbErr, Statement, StreamTrait};
+use sea_orm::{prelude::Decimal, ConnectionTrait, DbErr, Statement, StreamTrait};
 use tgbot::{
     api::Client,
     types::{ParseMode, ReplyParameters, SendMessage},
@@ -17,13 +17,13 @@ struct Stat {
     name: String,
     min_position: i32,
     max_position: i32,
-    avg_position: i32,
+    avg_position: Decimal,
     min_date: NaiveDate,
     max_date: NaiveDate,
     start_position: i32,
     end_position: i32,
     diff: i32,
-    per_day: i32,
+    per_day: Decimal,
 }
 
 #[derive(Default)]
@@ -96,7 +96,7 @@ where
     };
 
     // fucking ORM making complex queries a nightmare
-    let query = format!("select sub.*, start.position, end.position, start.position - end.position as diff, (start.position - end.position) / (JulianDay(max_date) - JulianDay(min_date)) per_day
+    let query = format!("select sub.*, start.position, end.position, start.position - end.position as diff, (start.position - end.position) / datediff(max_date, min_date) per_day
     from (select pp.id, pp.name, min(p.position) min, max(p.position) max, avg(p.position) avg, min(p.date) as min_date, max(p.date) as max_date
     from pornstars pp
     inner join positions p on pp.id = p.pornstar_id group by pp.id) sub
@@ -127,13 +127,13 @@ where
                 String,
                 i32,
                 i32,
-                f64,
+                Decimal,
                 NaiveDateTime,
                 NaiveDateTime,
                 i32,
                 i32,
                 i32,
-                Option<f64>,
+                Option<Decimal>,
             )>()?;
 
             Ok(Stat {
@@ -141,13 +141,13 @@ where
                 name,
                 min_position,
                 max_position,
-                avg_position: avg_position.round() as i32,
+                avg_position: avg_position.floor(),
                 min_date: min_date.date(),
                 max_date: max_date.date(),
                 start_position,
                 end_position,
                 diff,
-                per_day: per_day.unwrap_or_default().round() as i32,
+                per_day: per_day.unwrap_or_default().floor(),
             })
         })
         .try_collect::<Vec<_>>()

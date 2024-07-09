@@ -7,7 +7,7 @@ use sea_orm::{
 };
 use tgbot::{
     api::Client,
-    types::{ParseMode, ReplyParameters, SendMessage, User},
+    types::{LinkPreviewOptions, ParseMode, ReplyParameters, SendMessage, User},
 };
 
 use crate::Error;
@@ -155,6 +155,7 @@ where
                 },
             )
             .with_parse_mode(ParseMode::Markdown)
+            .with_link_preview_options(LinkPreviewOptions::default().with_is_disabled(true))
             .with_reply_parameters(ReplyParameters::new(message_id)),
         )
         .await?;

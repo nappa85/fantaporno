@@ -8,7 +8,8 @@ use sea_orm::{ConnectionTrait, StreamTrait};
 use tgbot::{
     api::Client,
     types::{
-        mime, InputFile, InputFileReader, ParseMode, ReplyParameters, SendMessage, SendPhoto, User,
+        mime, InputFile, InputFileReader, LinkPreviewOptions, ParseMode, ReplyParameters,
+        SendMessage, SendPhoto, User,
     },
 };
 
@@ -159,6 +160,7 @@ where
             .execute(
                 SendMessage::new(chat.id, msg)
                     .with_parse_mode(ParseMode::Markdown)
+                    .with_link_preview_options(LinkPreviewOptions::default().with_is_disabled(true))
                     .with_reply_parameters(ReplyParameters::new(message_id)),
             )
             .await?;

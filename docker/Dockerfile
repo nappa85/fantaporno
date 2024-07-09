@@ -6,7 +6,7 @@ RUN git clone https://github.com/nappa85/fantaporno.git && cd fantaporno && carg
 
 FROM debian:bullseye-slim
 
-RUN apt-get update && apt-get install -y libsqlite3-0 ca-certificates libfontconfig1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates libfontconfig1 && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/fantaporno/target/release/fantaporno /usr/local/bin/fantaporno
 

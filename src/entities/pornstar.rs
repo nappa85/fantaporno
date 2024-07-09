@@ -94,11 +94,15 @@ pub async fn get_costs<C: ConnectionTrait>(
         .filter(super::position::Column::Date.eq(max_date))
         .select_only()
         .column_as(super::position::Column::Position.max(), "max")
-        .into_tuple::<u32>()
+        .into_tuple::<i32>()
         .one(conn)
         .await?
     else {
         return Ok(None);
+    };
+
+    let Ok(max_position) = u32::try_from(max_position) else {
+        return Err(crate::Error::InvalidPosition);
     };
 
     Ok(Some(

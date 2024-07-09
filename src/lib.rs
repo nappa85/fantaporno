@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use chrono::{Duration, NaiveDateTime, OutOfRangeError, Utc};
 use futures_util::{stream, StreamExt, TryStreamExt};
 use reqwest::Client;
@@ -46,7 +44,7 @@ pub enum Error {
     Plotter(Box<dyn std::error::Error>),
 }
 
-pub async fn scrape_pornstar_amatorial<C>(conn: &C, notifier: Arc<Notify>) -> Result<(), Error>
+pub async fn scrape_pornstar_amatorial<C>(conn: &C, notifier: &Notify) -> Result<(), Error>
 where
     C: ConnectionTrait + TransactionTrait,
 {
