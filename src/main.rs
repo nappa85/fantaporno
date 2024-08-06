@@ -11,7 +11,13 @@ async fn main() -> Result<(), Error> {
     let token = env::var("BOT_TOKEN").map_err(|_| Error::MissingBotToken)?;
     let name = env::var("BOT_NAME").map_err(|_| Error::MissingBotName)?;
     let name = format!("@{}", name.strip_prefix('@').unwrap_or(name.as_str()));
-    let conn = Database::connect("mysql://mariadb:mariadb@mariadb/fantaporno").await?;
+    let db_url = env::var("DB_URL");
+    let conn = Database::connect(
+        db_url
+            .as_deref()
+            .unwrap_or("mysql://mariadb:mariadb@mariadb/fantaporno"),
+    )
+    .await?;
     let notify = Notify::new();
     select! {
         out = scrape_pornstar_amatorial(&conn, &notify) => {

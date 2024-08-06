@@ -34,7 +34,9 @@ where
     };
 
     let now = Utc::now().naive_utc();
-    let Some(team) = crate::entities::team::Entity::find_by_id((player.id, pornstar.id))
+    let Some(team) = crate::entities::team::Entity::find()
+        .filter(crate::entities::team::Column::PlayerId.eq(player.id))
+        .filter(crate::entities::team::Column::PornstarId.eq(pornstar.id))
         .filter(
             crate::entities::team::Column::EndDate
                 .is_null()

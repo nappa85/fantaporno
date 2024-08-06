@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDateTime, OutOfRangeError, Utc};
+use chrono::{Duration, NaiveDateTime, OutOfRangeError, Timelike, Utc};
 use futures_util::{stream, StreamExt, TryStreamExt};
 use reqwest::Client;
 use scraper::{error::SelectorErrorKind, Html, Selector};
@@ -26,6 +26,8 @@ pub enum Error {
     SeaOrm(#[from] DbErr),
     #[error("Scraper error: {0}")]
     Scraper(#[from] SelectorErrorKind<'static>),
+    #[error("Invalid time")]
+    InvalidTime,
     #[error("Invalid next day")]
     InvalidNextDay,
     // #[error("Invalid next week")]
@@ -77,7 +79,7 @@ where
                 // wait until tomorrow
                 let next_tick = now
                     .date_naive()
-                    .and_hms_opt(23, 0, 0)
+                    .and_hms_nano_opt(23, 0, 0, 0)
                     .ok_or(Error::InvalidNextDay)?;
                 let next_tick = next_tick
                     .and_local_timezone(Utc)
@@ -87,7 +89,7 @@ where
                 sleep((next_tick - now).to_std()?).await;
                 next_tick
             } else {
-                now
+                now.with_nanosecond(0).ok_or(Error::InvalidTime)?
             };
 
         let txn = conn.begin().await?;

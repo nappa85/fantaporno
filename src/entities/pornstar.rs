@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use sea_orm::{entity::prelude::*, ActiveValue, QuerySelect};
+use tracing::error;
 
 use super::chat::Lang;
 
@@ -130,7 +131,14 @@ pub async fn find_or_insert<C: ConnectionTrait>(
     name: &str,
     url: &str,
 ) -> Result<Model, DbErr> {
-    let pornstar = Entity::find().filter(Column::Url.eq(url)).one(conn).await?;
+    let pornstar = Entity::find()
+        .filter(Column::Url.eq(url))
+        .one(conn)
+        .await
+        .map_err(|err| {
+            error!("entities:pornstar::find_or_insert({name}, {url}) find error: {err}");
+            err
+        })?;
     if let Some(p) = pornstar {
         return if p.name == name {
             Ok(p)
@@ -142,6 +150,10 @@ pub async fn find_or_insert<C: ConnectionTrait>(
             }
             .update(conn)
             .await
+            .map_err(|err| {
+                error!("entities:pornstar::find_or_insert({name}, {url}) update error: {err}");
+                err
+            })
         };
     }
 
@@ -152,6 +164,10 @@ pub async fn find_or_insert<C: ConnectionTrait>(
     }
     .insert(conn)
     .await
+    .map_err(|err| {
+        error!("entities:pornstar::find_or_insert({name}, {url}) insert error: {err}");
+        err
+    })
 }
 
 pub async fn search<C: ConnectionTrait>(
