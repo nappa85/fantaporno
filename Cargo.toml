@@ -17,15 +17,15 @@ plotters = { version = "0.3.3", default-features = false, features = [
     "chrono",
 ] }
 reqwest = "0.12.5"
-scraper = "0.19.0"
-sea-orm = { version = "0.12.10", features = [
+scraper = "0.20.0"
+sea-orm = { version = "1.0.0", features = [
     "macros",
     "sqlx-mysql",
     "runtime-tokio-rustls",
 ] }
 stream_throttle = "0.5.1"
 thiserror = "1.0.51"
-tgbot = "0.27.0"
+tgbot = "0.28.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.35.1", features = [
@@ -36,7 +36,7 @@ tokio = { version = "1.35.1", features = [
 ] }
 
 [dev-dependencies]
-sea-orm = { version = "0.12.10", features = [
+sea-orm = { version = "1.0.0", features = [
     "macros",
     "sqlx-mysql",
     "runtime-tokio-rustls",

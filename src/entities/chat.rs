@@ -25,7 +25,7 @@ impl Related<super::player::Entity> for Entity {
 impl ActiveModelBehavior for ActiveModel {}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "String(Some(2))")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N(2))")]
 pub enum Lang {
     #[sea_orm(string_value = "en")]
     En,
