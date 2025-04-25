@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use sea_orm::{entity::prelude::*, ActiveValue, QueryOrder};
 use tracing::error;
 
@@ -7,9 +7,9 @@ use tracing::error;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
-    pub pornstar_id: i32,
-    pub date: NaiveDateTime,
-    pub position: i32,
+    pub pornstar_id: i64,
+    pub date: DateTime<Utc>,
+    pub position: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -28,9 +28,9 @@ impl ActiveModelBehavior for ActiveModel {}
 
 pub async fn inserted<C: ConnectionTrait>(
     conn: &C,
-    pornstar_id: i32,
-    date: NaiveDateTime,
-    rank: i32,
+    pornstar_id: i64,
+    date: DateTime<Utc>,
+    rank: i64,
 ) -> Result<bool, DbErr> {
     let position = Entity::find()
         .filter(Column::PornstarId.eq(pornstar_id))

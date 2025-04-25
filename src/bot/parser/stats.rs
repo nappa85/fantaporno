@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, Utc};
 use futures_util::{StreamExt, TryStreamExt};
 use sea_orm::{prelude::Decimal, ConnectionTrait, DbErr, Statement, StreamTrait};
 use tgbot::{
@@ -13,16 +13,16 @@ use crate::Error;
 use super::{Chat, Lang};
 
 struct Stat {
-    _id: i32,
+    _id: i64,
     name: String,
-    min_position: i32,
-    max_position: i32,
+    min_position: i64,
+    max_position: i64,
     avg_position: Decimal,
     min_date: NaiveDate,
     max_date: NaiveDate,
-    start_position: i32,
-    end_position: i32,
-    diff: i32,
+    start_position: i64,
+    end_position: i64,
+    diff: i64,
     per_day: Decimal,
 }
 
@@ -96,12 +96,13 @@ where
     };
 
     // fucking ORM making complex queries a nightmare
-    let query = format!("select sub.*, start.position, end.position, start.position - end.position as diff, (start.position - end.position) / datediff(max_date, min_date) per_day
+    let query = format!("select sub.*, start.position, \"end\".position, start.position - \"end\".position as diff,
+        case when extract(day from age(max_date, min_date)) = 0 then 0 else (start.position - \"end\".position) / extract(day from age(max_date, min_date)) end per_day
     from (select pp.id, pp.name, min(p.position) min, max(p.position) max, avg(p.position) avg, min(p.date) as min_date, max(p.date) as max_date
     from pornstars pp
     inner join positions p on pp.id = p.pornstar_id group by pp.id) sub
     inner join positions start on sub.id = start.pornstar_id AND start.date = sub.min_date
-    inner join positions end on sub.id = end.pornstar_id and end.date = sub.max_date
+    inner join positions \"end\" on sub.id = \"end\".pornstar_id and \"end\".date = sub.max_date
     order by {sort} {}
     limit 10", sort.dir());
 
@@ -123,16 +124,16 @@ where
                 diff,
                 per_day,
             ) = row?.try_get_many_by_index::<(
-                i32,
+                i64,
                 String,
-                i32,
-                i32,
+                i64,
+                i64,
                 Decimal,
-                NaiveDateTime,
-                NaiveDateTime,
-                i32,
-                i32,
-                i32,
+                DateTime<Utc>,
+                DateTime<Utc>,
+                i64,
+                i64,
+                i64,
                 Option<Decimal>,
             )>()?;
 
@@ -142,8 +143,8 @@ where
                 min_position,
                 max_position,
                 avg_position: avg_position.floor(),
-                min_date: min_date.date(),
-                max_date: max_date.date(),
+                min_date: min_date.date_naive(),
+                max_date: max_date.date_naive(),
                 start_position,
                 end_position,
                 diff,

@@ -1,4 +1,4 @@
-const BUDGET: u32 = 1000;
+const BUDGET: i64 = 1000;
 
 pub mod chat;
 pub mod player;

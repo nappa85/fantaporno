@@ -35,7 +35,7 @@ where
         Err(err) => return Ok(Err(err)),
     };
 
-    let now = Utc::now().naive_utc();
+    let now = Utc::now();
     if let Some(team) = crate::entities::team::Entity::find()
         .filter(
             crate::entities::team::Column::PornstarId

@@ -46,7 +46,7 @@ where
         )
         .select_only()
         .column(crate::entities::team::Column::PornstarId)
-        .into_tuple::<i32>()
+        .into_tuple::<i64>()
         .all(conn)
         .await?;
 
@@ -54,7 +54,7 @@ where
         .await?
         .unwrap_or_default();
 
-    let mut history = player.history(conn, None::<[i32; 0]>).await?;
+    let mut history = player.history(conn, None::<[i64; 0]>).await?;
 
     let list = crate::entities::pornstar::Entity::find()
         .filter(crate::entities::pornstar::Column::Id.is_in(team))

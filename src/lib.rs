@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDateTime, OutOfRangeError, Timelike, Utc};
+use chrono::{DateTime, Duration, OutOfRangeError, Timelike, Utc};
 use futures_util::{stream, StreamExt, TryStreamExt};
 use reqwest::Client;
 use scraper::{error::SelectorErrorKind, Html, Selector};
@@ -63,34 +63,33 @@ where
         let last_scrape = entities::position::Entity::find()
             .select_only()
             .column_as(entities::position::Column::Date.max(), "date")
-            .into_tuple::<Option<NaiveDateTime>>()
+            .into_tuple::<Option<DateTime<Utc>>>()
             .one(conn)
             .await?;
         let now = Utc::now();
-        let tick =
-            if now.naive_utc() - last_scrape.flatten().unwrap_or_default() < Duration::days(1) {
-                // // wait next sunday
-                // let next_tick = now
-                //     .date_naive()
-                //     .week(Weekday::Sun)
-                //     .last_day()
-                //     .and_hms_opt(23, 0, 0)
-                //     .ok_or(Error::InvalidNextWeek)?;
-                // wait until tomorrow
-                let next_tick = now
-                    .date_naive()
-                    .and_hms_nano_opt(23, 0, 0, 0)
-                    .ok_or(Error::InvalidNextDay)?;
-                let next_tick = next_tick
-                    .and_local_timezone(Utc)
-                    .single()
-                    .ok_or(Error::InvalidTimezone)?
-                    + Duration::hours(1);
-                sleep((next_tick - now).to_std()?).await;
-                next_tick
-            } else {
-                now.with_nanosecond(0).ok_or(Error::InvalidTime)?
-            };
+        let tick = if now - last_scrape.flatten().unwrap_or_default() < Duration::days(1) {
+            // // wait next sunday
+            // let next_tick = now
+            //     .date_naive()
+            //     .week(Weekday::Sun)
+            //     .last_day()
+            //     .and_hms_opt(23, 0, 0)
+            //     .ok_or(Error::InvalidNextWeek)?;
+            // wait until tomorrow
+            let next_tick = now
+                .date_naive()
+                .and_hms_nano_opt(23, 0, 0, 0)
+                .ok_or(Error::InvalidNextDay)?;
+            let next_tick = next_tick
+                .and_local_timezone(Utc)
+                .single()
+                .ok_or(Error::InvalidTimezone)?
+                + Duration::hours(1);
+            sleep((next_tick - now).to_std()?).await;
+            next_tick
+        } else {
+            now.with_nanosecond(0).ok_or(Error::InvalidTime)?
+        };
 
         let txn = conn.begin().await?;
         let scraped = stream::iter(1..=16)
@@ -113,9 +112,7 @@ where
         for scrap in scraped {
             if let Some(pornstar_rank) = scrap {
                 for (pornstar_id, rank) in pornstar_rank {
-                    if entities::position::inserted(&txn, pornstar_id, tick.naive_utc(), rank)
-                        .await?
-                    {
+                    if entities::position::inserted(&txn, pornstar_id, tick, rank).await? {
                         commit = true;
                     }
                 }
@@ -142,7 +139,7 @@ async fn scrape_pornstar_amatorial_page<C>(
     name: &Selector,
     link: &Selector,
     page: u8,
-) -> Result<Option<Vec<(i32, i32)>>, Error>
+) -> Result<Option<Vec<(i64, i64)>>, Error>
 where
     C: ConnectionTrait,
 {

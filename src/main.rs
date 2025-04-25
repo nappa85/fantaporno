@@ -15,7 +15,7 @@ async fn main() -> Result<(), Error> {
     let conn = Database::connect(
         db_url
             .as_deref()
-            .unwrap_or("mysql://mariadb:mariadb@mariadb/fantaporno"),
+            .unwrap_or("postgres://postgres:postgres@postgres/fantaporno"),
     )
     .await?;
     let notify = Notify::new();

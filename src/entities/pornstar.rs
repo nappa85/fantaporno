@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use sea_orm::{entity::prelude::*, ActiveValue, QuerySelect};
 use tracing::error;
 
@@ -10,7 +10,7 @@ use super::chat::Lang;
 #[sea_orm(table_name = "pornstars")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
+    pub id: i64,
     pub name: String,
     pub url: String,
 }
@@ -48,7 +48,7 @@ impl Model {
         &self,
         conn: &C,
         lang: Lang,
-    ) -> Result<Result<u32, String>, crate::Error> {
+    ) -> Result<Result<i64, String>, crate::Error> {
         match get_costs(conn, [self.id])
             .await?
             .and_then(|mut costs| costs.remove(&self.id))
@@ -70,12 +70,12 @@ impl Model {
 
 pub async fn get_costs<C: ConnectionTrait>(
     conn: &C,
-    ids: impl IntoIterator<Item = i32>,
-) -> Result<Option<HashMap<i32, u32>>, crate::Error> {
+    ids: impl IntoIterator<Item = i64>,
+) -> Result<Option<HashMap<i64, i64>>, crate::Error> {
     let Some(max_date) = super::position::Entity::find()
         .select_only()
         .column_as(super::position::Column::Date.max(), "max")
-        .into_tuple::<NaiveDateTime>()
+        .into_tuple::<DateTime<Utc>>()
         .one(conn)
         .await?
     else {
@@ -95,15 +95,11 @@ pub async fn get_costs<C: ConnectionTrait>(
         .filter(super::position::Column::Date.eq(max_date))
         .select_only()
         .column_as(super::position::Column::Position.max(), "max")
-        .into_tuple::<i32>()
+        .into_tuple::<i64>()
         .one(conn)
         .await?
     else {
         return Ok(None);
-    };
-
-    let Ok(max_position) = u32::try_from(max_position) else {
-        return Err(crate::Error::InvalidPosition);
     };
 
     Ok(Some(
@@ -116,13 +112,9 @@ pub async fn get_costs<C: ConnectionTrait>(
                     ..
                 } = position;
 
-                let Ok(position) = u32::try_from(position) else {
-                    return Err(crate::Error::InvalidPosition);
-                };
-
-                Ok((pornstar_id, super::BUDGET * position / max_position))
+                (pornstar_id, super::BUDGET * position / max_position)
             })
-            .collect::<Result<_, _>>()?,
+            .collect(),
     ))
 }
 

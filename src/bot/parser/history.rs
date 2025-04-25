@@ -73,11 +73,11 @@ where
             .build_cartesian_2d(
                 history
                     .last()
-                    .map(|(date, _points)| date.date())
+                    .map(|(date, _points)| date.date_naive())
                     .unwrap_or_default()
                     ..history
                         .first()
-                        .map(|(date, _points)| date.date())
+                        .map(|(date, _points)| date.date_naive())
                         .unwrap_or_default(),
                 history
                     .iter()
@@ -103,7 +103,7 @@ where
                 history
                     .into_iter()
                     .rev()
-                    .map(|(date, points)| (date.date(), points)),
+                    .map(|(date, points)| (date.date_naive(), points)),
                 &RED,
             ))
             .map_err(|err| Error::Plotter(Box::new(err)))?

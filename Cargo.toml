@@ -20,12 +20,12 @@ reqwest = "0.12.5"
 scraper = "0.20.0"
 sea-orm = { version = "1.0.0", features = [
     "macros",
-    "sqlx-mysql",
+    "sqlx-postgres",
     "runtime-tokio-rustls",
 ] }
 stream_throttle = "0.5.1"
 thiserror = "1.0.51"
-tgbot = "0.28.0"
+tgbot = "0.36.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.35.1", features = [
@@ -38,7 +38,7 @@ tokio = { version = "1.35.1", features = [
 [dev-dependencies]
 sea-orm = { version = "1.0.0", features = [
     "macros",
-    "sqlx-mysql",
+    "sqlx-postgres",
     "runtime-tokio-rustls",
     "mock",
 ] }

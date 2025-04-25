@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use futures_util::stream::TryStreamExt;
 use sea_orm::{entity::prelude::*, ActiveValue, Statement, StreamTrait};
 use tgbot::types::User;
@@ -11,12 +11,12 @@ use super::chat::Lang;
 #[sea_orm(table_name = "players")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
+    pub id: i64,
     pub telegram_id: i64,
     pub tag: Option<String>,
     pub chat_id: i64,
     pub name: String,
-    pub budget: u32,
+    pub budget: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -50,25 +50,29 @@ impl Model {
         &self,
         conn: &C,
         pornstar_ids: Option<I>,
-    ) -> Result<HashMap<i32, History>, DbErr>
+    ) -> Result<HashMap<i64, History>, DbErr>
     where
         C: ConnectionTrait + StreamTrait,
-        I: IntoIterator<Item = i32>,
+        I: IntoIterator<Item = i64>,
         <I as IntoIterator>::IntoIter: ExactSizeIterator,
     {
         // fucking ORM making complex queries a nightmare
         let mut query = String::from("SELECT t.start_date, p.pornstar_id, p.date, p.position FROM teams t
         INNER JOIN positions p ON p.pornstar_id = t.pornstar_id AND p.date >= t.start_date AND (t.end_date IS NULL OR p.date <= t.end_date)
-        WHERE t.player_id = ?");
+        WHERE t.player_id = $1");
         let mut params = vec![Value::from(self.id)];
         if let Some(pornstar_ids) = pornstar_ids {
             let iter = pornstar_ids.into_iter();
             query.push_str(&format!(
-                " AND t.pornstar_id IN ({})",
-                vec!["?"; iter.len()].join(", ")
+                " AND t.pornstar_id IN (${})",
+                (2..(iter.len() + 2))
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", $")
             ));
             params.extend(iter.map(Value::from));
         }
+        query.push_str(" ORDER BY p.id ASC");
 
         let stmt = Statement::from_sql_and_values(conn.get_database_backend(), query, params);
         conn.stream(stmt)
@@ -83,22 +87,22 @@ impl Model {
     }
 
     /// recalculate player's score based on entire player history
-    pub async fn score<C: ConnectionTrait + StreamTrait>(&self, conn: &C) -> Result<i32, DbErr> {
-        let pornstars = self.history(conn, None::<[i32; 0]>).await?;
+    pub async fn score<C: ConnectionTrait + StreamTrait>(&self, conn: &C) -> Result<i64, DbErr> {
+        let pornstars = self.history(conn, None::<[i64; 0]>).await?;
 
-        Ok(pornstars.values().map(History::score).sum::<i32>())
+        Ok(pornstars.values().map(History::score).sum::<i64>())
     }
 }
 
 #[derive(Debug, Default)]
-pub struct History(Vec<(NaiveDateTime, NaiveDateTime, i32)>);
+pub struct History(Vec<(DateTime<Utc>, DateTime<Utc>, i64)>);
 
 impl History {
-    fn push(&mut self, start_date: NaiveDateTime, date: NaiveDateTime, position: i32) {
+    fn push(&mut self, start_date: DateTime<Utc>, date: DateTime<Utc>, position: i64) {
         self.0.push((start_date, date, position));
     }
 
-    pub fn scores(&self) -> impl DoubleEndedIterator<Item = (NaiveDateTime, i32)> + '_ {
+    pub fn scores(&self) -> impl DoubleEndedIterator<Item = (DateTime<Utc>, i64)> + '_ {
         self.0.windows(2).filter_map(|window| {
             let (start_date0, _, position0) = window[0];
             let (start_date1, date, position1) = window[1];
@@ -106,8 +110,8 @@ impl History {
         })
     }
 
-    pub fn score(&self) -> i32 {
-        self.scores().map(|(_, i)| i).sum::<i32>()
+    pub fn score(&self) -> i64 {
+        self.scores().map(|(_, i)| i).sum::<i64>()
     }
 }
 

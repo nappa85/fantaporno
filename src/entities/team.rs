@@ -1,15 +1,15 @@
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "teams")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
-    pub player_id: i32,
-    pub pornstar_id: i32,
-    pub start_date: NaiveDateTime,
-    pub end_date: Option<NaiveDateTime>,
+    pub id: i64,
+    pub player_id: i64,
+    pub pornstar_id: i64,
+    pub start_date: DateTime<Utc>,
+    pub end_date: Option<DateTime<Utc>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

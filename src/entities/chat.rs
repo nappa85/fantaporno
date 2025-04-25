@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use sea_orm::{entity::prelude::*, ActiveValue};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
@@ -6,7 +6,7 @@ use sea_orm::{entity::prelude::*, ActiveValue};
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: i64,
-    pub start_date: NaiveDateTime,
+    pub start_date: DateTime<Utc>,
     pub lang: Lang,
 }
 
@@ -57,7 +57,7 @@ pub async fn find_or_insert<C: ConnectionTrait>(
 
     ActiveModel {
         id: ActiveValue::Set(id),
-        start_date: ActiveValue::Set(Utc::now().naive_utc()),
+        start_date: ActiveValue::Set(Utc::now()),
         ..Default::default()
     }
     .insert(conn)
